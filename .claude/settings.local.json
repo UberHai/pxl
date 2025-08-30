@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:tonejs.github.io)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:codepen.io)",
+      "WebFetch(domain:medium.com)"
+    ],
+    "deny": []
+  }
+}

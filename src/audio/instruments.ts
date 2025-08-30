@@ -176,12 +176,12 @@ function buildPulse50(): InstrumentInstance {
  * Build PWM Lead instrument (Pulse Width Modulation)
  */
 function buildPWMLead(): InstrumentInstance {
-  const channel = new Tone.Channel({ volume: -8 }); // Quieter due to modulation intensity
+  const channel = new Tone.Channel({ volume: -6 });
 
   const synth = new Tone.Synth({
     oscillator: {
       type: 'pulse',
-      width: 0.3, // Starting width
+      width: 0.35, // Fixed width for now - creates nice PWM-like character
     },
     envelope: {
       attack: 0.02,
@@ -190,12 +190,6 @@ function buildPWMLead(): InstrumentInstance {
       release: 0.3,
     },
   });
-
-  // LFO for pulse width modulation
-  const lfo = new Tone.LFO(4, 0.1, 0.9); // 4Hz, modulating width from 0.1 to 0.9
-  // Connect LFO to oscillator width using proper Tone.js syntax
-  (synth.oscillator as any).width = lfo;
-  lfo.start();
 
   const filter = new Tone.Filter(1400, 'lowpass');
   filter.Q.value = 2;
@@ -220,7 +214,6 @@ function buildPWMLead(): InstrumentInstance {
       }
     },
     dispose: () => {
-      lfo.dispose();
       synth.dispose();
       filter.dispose();
       channel.dispose();
@@ -329,6 +322,7 @@ function buildSubSineBass(): InstrumentInstance {
     },
   };
 }
+
 
 /**
  * Build Noise Kick instrument
@@ -902,12 +896,20 @@ function buildSimpleChords(): InstrumentInstance {
  */
 export const BASIC_INSTRUMENTS: InstrumentPreset[] = [
   { id: 'pulse12', name: 'Pulse Lead 12.5%', build: buildPulse125 },
+  { id: 'pulse25', name: 'Pulse Lead 25%', build: buildPulse25 },
   { id: 'pulse50', name: 'Pulse Lead 50%', build: buildPulse50 },
+  { id: 'pwm', name: 'PWM Lead', build: buildPWMLead },
   { id: 'tri-bass', name: 'Triangle Bass', build: buildTriangleBass },
   { id: 'sub', name: 'Sub Sine Bass', build: buildSubSineBass },
   { id: 'n-kick', name: 'Noise Kick', build: buildNoiseKick },
   { id: 'n-snare', name: 'Noise Snare', build: buildNoiseSnare },
+  { id: 'n-hat', name: 'Noise Hat', build: buildNoiseHat },
   { id: 'arp-pluck', name: 'Chip Arp Pluck', build: buildChipArpPluck },
+  { id: 'fm-bell', name: 'FM Bell', build: buildFMBell },
+  { id: 'bc-saw', name: 'Bitcrushed Saw', build: buildBitcrushedSaw },
+  { id: 'chip-organ', name: 'Chip Organ', build: buildChipOrgan },
+  { id: 'sfx-blip', name: 'GamePad Blip', build: buildGamePadBlip },
+  { id: 'poly-pulse', name: 'PolyPulse Chords', build: buildPolyPulseChords },
   { id: 'simple-chords', name: 'Simple Chords', build: buildSimpleChords },
 ];
 
@@ -944,7 +946,7 @@ function buildPlaceholder(instrumentName: string): InstrumentInstance {
  * All instrument presets (working + coming soon)
  */
 export const ALL_INSTRUMENTS: InstrumentPreset[] = [
-  // ✅ COMPLETE INSTRUMENT LIBRARY - All 15 instruments working!
+  // ✅ COMPLETE INSTRUMENT LIBRARY - All 16 instruments working!
   
   // Pulse Family
   { id: 'pulse12', name: 'Pulse Lead 12.5%', build: buildPulse125 },
