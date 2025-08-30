@@ -6,7 +6,7 @@ A tracker-style, pattern-based sequencer with modern piano-roll options, built-i
 
 - 🎵 **One-screen Compose**: Transport controls, BPM, Time Signature, Bars, Key/Scale, Swing, Quantize
 - 🎹 **Interactive Pattern Grid**: Click-to-toggle notes with real-time audio playback
-- 🎛️ **Working Chip Instruments**: 4 fully functional NES/GB-style instruments with audio synthesis
+- 🎛️ **Complete Chip Instruments**: 29 fully functional chiptune instruments with audio synthesis
 - 🎚️ **Professional Audio Engine**: Tone.js-powered real-time synthesis and effects
 - 📊 **Live Visual Feedback**: Playback cursor, note visualization, and audio monitoring
 - 🎼 **Music Production Ready**: Create complete chiptune compositions immediately
@@ -67,11 +67,11 @@ A tracker-style, pattern-based sequencer with modern piano-roll options, built-i
 - ✅ State persistence in localStorage
 
 **What Doesn't Work Yet:**
-- ⚠️ Limited audio playback (4 basic instruments, no persistence)
-- ⚠️ Basic pattern editing (click to add notes, real-time playback)
-- ❌ Full instrument library (only 4 basic instruments implemented)
-- ❌ No file export
-- ❌ No AI assistance
+- ⚠️ Project persistence (save/load project state)
+- ✅ WAV export functionality (implemented!)
+- ❌ MIDI export functionality
+- ❌ AI chord progression helper (UI implemented, API not connected)
+- ❌ Advanced pattern editing features (note velocity, duration control)
 
 This is now a **functional audio prototype** with working music production capabilities. Users can create patterns and hear them play back in real-time. See [CURRENT.md](CURRENT.md) for detailed status.
 
@@ -95,7 +95,7 @@ src/
     ai/                # ❌ AI helper components
     common/            # ❌ Shared components
     ui/                # ✅ shadcn/ui components (working)
-  audio/               # ✅ Tone.js audio engine (4 instruments working)
+  audio/               # ✅ Tone.js audio engine (29 instruments working!)
   state/               # ✅ Zustand stores (fixed initialization issues)
   schemas/             # ✅ Zod validation schemas
   types/               # ✅ TypeScript type definitions
@@ -105,23 +105,46 @@ src/
 
 ## Instruments
 
-The app includes 15 chip-inspired instruments:
+The app includes **29 fully functional** chip-inspired instruments organized in categories:
 
-1. Pulse Lead 12.5%
-2. Pulse Lead 25% 
-3. Pulse Lead 50%
-4. PWM Lead
-5. Triangle Bass
-6. Sub Sine Bass
-7. Noise Kick
-8. Noise Snare
-9. Noise Hat
-10. Chip Arp Pluck
-11. PolyPulse Chords
-12. FM Bell
-13. Bitcrushed Saw Lead
-14. Chip Organ
-15. GamePad Blip
+**Pulse Family (4):**
+1. Pulse Lead 12.5% - Thin, cutting lead sound
+2. Pulse Lead 25% - Fuller pulse lead
+3. Pulse Lead 50% - Classic square wave
+4. PWM Lead - Pulse width modulation with LFO
+
+**Bass Section (4):**
+5. Triangle Bass - Warm triangle wave bass
+6. Sub Sine Bass - Deep sub-bass frequencies
+7. Square Bass - Classic square wave bass
+8. FM Bass - FM synthesis bass
+
+**Percussion Kit (4):**
+9. Noise Kick - Punchy filtered noise kick
+10. Noise Snare - Band-pass filtered snare
+11. Noise Hat - High-pass filtered hat
+12. Noise Crash - Filtered crash cymbal
+
+**Lead/Melodic (15):**
+13. Chip Arp Pluck - Fast envelope pulse pluck
+14. FM Bell - 2-operator FM synthesis
+15. Bitcrushed Saw Lead - Lo-fi sawtooth with bitcrusher
+16. Chip Organ - Additive synthesis with harmonics
+17. Wavetable Lead - Custom wavetable synthesis
+18. Ring Mod Lead - Ring modulation effects
+19. Detuned Pulse - Pulse with detuning
+20. Chebyshev Lead - Chebyshev wave shaping
+21. AM Synth - Amplitude modulation
+22. Digital Glitch - Digital distortion effects
+23. Resonant Sweep - Filtered sweep effects
+24. Additive Bell - Additive synthesis bell
+25. Vibrato Lead - LFO vibrato effects
+26. Arpeggio Bass - Arpeggiated bass lines
+27. Duty Cycle Sweep - Pulse width sweeping
+
+**Chords & Special (2):**
+28. PolyPulse Chords - Enhanced polyphonic chords
+29. Simple Chords - Basic chord progressions
 
 ## License
 

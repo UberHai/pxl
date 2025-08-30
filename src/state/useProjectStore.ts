@@ -56,6 +56,17 @@ interface ProjectState {
   updateTrackVolume: (trackId: string, volume: number) => void;
   updateTrackPan: (trackId: string, pan: number) => void;
   toggleMetronome: () => void;
+
+  // Persistence actions
+  saveProject: () => Promise<void>;
+  loadProject: (projectData: Project) => void;
+  exportProject: () => void;
+  importProject: () => Promise<void>;
+  resetProject: () => void;
+
+  // Audio export actions
+  exportToWav: (options?: any) => Promise<void>;
+  exportToMidi: () => Promise<void>;
 }
 
 // Create default project
@@ -90,24 +101,68 @@ const createDefaultTrack = (id: string, name: string, instrumentId: string): Tra
   automation: [],
 });
 
+// Auto-save throttle
+let autoSaveTimeout: NodeJS.Timeout | null = null;
+const AUTO_SAVE_DELAY = 2000; // 2 seconds
+
+const triggerAutoSave = () => {
+  if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
+  autoSaveTimeout = setTimeout(() => {
+    const state = get();
+    if (state.saveProject) {
+      state.saveProject();
+    }
+  }, AUTO_SAVE_DELAY);
+};
+
+// Load from localStorage on initialization
+const loadFromLocalStorage = (): Partial<ProjectState> => {
+  try {
+    const saved = localStorage.getItem('pxl-project-autosave');
+    if (saved) {
+      const data = JSON.parse(saved);
+      console.log('📁 Loaded project from localStorage');
+      return {
+        project: data.project,
+        ui: {
+          ...data.ui,
+          isPlaying: false,
+          playbackPosition: 0
+        },
+        audio: {
+          ...data.audio,
+          activeInstruments: new Map(),
+          audioInitialized: false
+        }
+      };
+    }
+  } catch (error) {
+    console.warn('Failed to load from localStorage:', error);
+  }
+  return {};
+};
+
 export const useProjectStore = create<ProjectState>((set, get) => {
   console.log('🏪 ZUSTAND STORE CREATING...');
+
+  // Initialize with saved data
+  const savedData = loadFromLocalStorage();
   
   return {
-    project: createDefaultProject(),
+    project: savedData.project || createDefaultProject(),
           ui: {
-        selectedTrackId: undefined,
+        selectedTrackId: savedData.ui?.selectedTrackId || undefined,
         isPlaying: false,
-        stepRes: 16,
-        currentView: 'pattern',
+        stepRes: savedData.ui?.stepRes || 16,
+        currentView: savedData.ui?.currentView || 'pattern',
         playbackPosition: 0,
-        loopEnabled: true,
+        loopEnabled: savedData.ui?.loopEnabled ?? true,
       },
     audio: {
       audioInitialized: false,
-      masterVolume: 0,
+      masterVolume: savedData.audio?.masterVolume || 0,
       activeInstruments: new Map(),
-      metronomeEnabled: false,
+      metronomeEnabled: savedData.audio?.metronomeEnabled || false,
     },
 
     // Project actions
@@ -115,27 +170,35 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       project
     })),
 
-    setBpm: (bpm) => set((state) => ({
-      project: {
-        ...state.project,
-        meta: {
-          ...state.project.meta,
-          bpm,
-          updatedAt: Date.now()
+    setBpm: (bpm) => set((state) => {
+      const newState = {
+        project: {
+          ...state.project,
+          meta: {
+            ...state.project.meta,
+            bpm,
+            updatedAt: Date.now()
+          }
         }
-      }
-    })),
+      };
+      triggerAutoSave();
+      return newState;
+    }),
 
-    setTimeSig: (timeSig) => set((state) => ({
-      project: {
-        ...state.project,
-        meta: {
-          ...state.project.meta,
-          timeSig: timeSig as any,
-          updatedAt: Date.now()
+    setTimeSig: (timeSig) => set((state) => {
+      const newState = {
+        project: {
+          ...state.project,
+          meta: {
+            ...state.project.meta,
+            timeSig: timeSig as any,
+            updatedAt: Date.now()
+          }
         }
-      }
-    })),
+      };
+      triggerAutoSave();
+      return newState;
+    }),
 
     setBars: (bars) => set((state) => ({
       project: {
@@ -195,7 +258,7 @@ export const useProjectStore = create<ProjectState>((set, get) => {
         );
         newTrackId = newTrack.id;
 
-        return {
+        const newState = {
           ...state,
           project: {
             ...state.project,
@@ -210,6 +273,8 @@ export const useProjectStore = create<ProjectState>((set, get) => {
             selectedTrackId: newTrack.id
           }
         };
+        triggerAutoSave();
+        return newState;
       });
       return newTrackId;
     },
@@ -233,19 +298,23 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       };
     }),
 
-    updateTrack: (trackId, updates) => set((state) => ({
-      ...state,
-      project: {
-        ...state.project,
-        tracks: state.project.tracks.map(track => 
-          track.id === trackId ? { ...track, ...updates } : track
-        ),
-        meta: {
-          ...state.project.meta,
-          updatedAt: Date.now()
+    updateTrack: (trackId, updates) => set((state) => {
+      const newState = {
+        ...state,
+        project: {
+          ...state.project,
+          tracks: state.project.tracks.map(track =>
+            track.id === trackId ? { ...track, ...updates } : track
+          ),
+          meta: {
+            ...state.project.meta,
+            updatedAt: Date.now()
+          }
         }
-      }
-    })),
+      };
+      triggerAutoSave();
+      return newState;
+    }),
 
     selectTrack: (trackId) => set((state) => ({
       ...state,
@@ -415,5 +484,134 @@ export const useProjectStore = create<ProjectState>((set, get) => {
         }
       };
     }),
+
+    // Persistence actions
+    saveProject: async () => {
+      try {
+        const state = get();
+        const projectData = {
+          project: state.project,
+          ui: {
+            ...state.ui,
+            isPlaying: false, // Don't save playback state
+            playbackPosition: 0
+          },
+          audio: {
+            ...state.audio,
+            activeInstruments: new Map() // Don't save active instruments
+          },
+          version: '1.0',
+          savedAt: Date.now()
+        };
+
+        localStorage.setItem('pxl-project-autosave', JSON.stringify(projectData));
+        console.log('Project auto-saved to localStorage');
+      } catch (error) {
+        console.error('Failed to save project:', error);
+      }
+    },
+
+    loadProject: (projectData: Project) => {
+      set((state) => ({
+        ...state,
+        project: projectData,
+        ui: {
+          ...state.ui,
+          selectedTrackId: projectData.tracks[0]?.id || undefined
+        }
+      }));
+    },
+
+    exportProject: () => {
+      const state = get();
+      const exportData = {
+        project: state.project,
+        ui: {
+          ...state.ui,
+          isPlaying: false,
+          playbackPosition: 0
+        },
+        version: '1.0',
+        exportedAt: Date.now()
+      };
+
+      const dataStr = JSON.stringify(exportData, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${state.project.meta.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pxl`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      console.log('Project exported as JSON file');
+    },
+
+    importProject: async () => {
+      return new Promise<void>((resolve, reject) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.pxl,.json';
+        input.onchange = (e) => {
+          const file = (e.target as HTMLInputElement).files?.[0];
+          if (!file) {
+            reject(new Error('No file selected'));
+            return;
+          }
+
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const content = e.target?.result as string;
+              const data = JSON.parse(content);
+
+              // Handle both old and new format
+              const projectData = data.project || data;
+
+              get().loadProject(projectData);
+              console.log('Project imported successfully');
+              resolve();
+            } catch (error) {
+              console.error('Failed to parse project file:', error);
+              reject(new Error('Invalid project file format'));
+            }
+          };
+          reader.readAsText(file);
+        };
+        input.click();
+      });
+    },
+
+    resetProject: () => {
+      const newProject = createDefaultProject();
+      set((state) => ({
+        project: newProject,
+        ui: {
+          ...state.ui,
+          selectedTrackId: undefined,
+          isPlaying: false,
+          playbackPosition: 0
+        }
+      }));
+    },
+
+    // Audio export actions
+    exportToWav: async (options = {}) => {
+      const { exportProject } = await import('@/audio/export');
+      const state = get();
+      await exportProject(state.project, options, (progress, status) => {
+        console.log(`Export progress: ${progress}% - ${status}`);
+        // Could add a progress state here if needed
+      });
+    },
+
+    exportToMidi: async () => {
+      // TODO: Implement MIDI export
+      console.log('MIDI export not yet implemented');
+      throw new Error('MIDI export not yet implemented');
+    },
   };
 });

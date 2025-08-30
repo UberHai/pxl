@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { useProjectStore } from '@/state/useProjectStore';
-import { Play, Pause, Square, Timer, Repeat } from 'lucide-react';
+import { Play, Pause, Square, Timer, Repeat, Save, Upload, Download, FileAudio } from 'lucide-react';
 import TimelineIndicator from './TimelineIndicator';
 import {
   initializeAudioContext,
@@ -35,7 +35,11 @@ export default function TransportBar() {
     stop,
     setAudioInitialized,
     toggleMetronome,
-    toggleLoop
+    toggleLoop,
+    saveProject,
+    exportProject,
+    importProject,
+    exportToWav
   } = useProjectStore();
 
   const audioInitialized = audio.audioInitialized;
@@ -138,6 +142,42 @@ export default function TransportBar() {
     stopTransport();
     stopPlayback();
     stop();
+  };
+
+  const handleSaveProject = async () => {
+    try {
+      await saveProject();
+      console.log('Project saved successfully');
+    } catch (error) {
+      console.error('Failed to save project:', error);
+    }
+  };
+
+  const handleExportProject = () => {
+    try {
+      exportProject();
+      console.log('Project exported successfully');
+    } catch (error) {
+      console.error('Failed to export project:', error);
+    }
+  };
+
+  const handleImportProject = async () => {
+    try {
+      await importProject();
+      console.log('Project imported successfully');
+    } catch (error) {
+      console.error('Failed to import project:', error);
+    }
+  };
+
+  const handleExportToWav = async () => {
+    try {
+      await exportToWav();
+      console.log('WAV export completed successfully');
+    } catch (error) {
+      console.error('Failed to export WAV:', error);
+    }
   };
 
   return (
@@ -324,11 +364,45 @@ export default function TransportBar() {
       <div className="flex items-center gap-4 px-4 ml-auto">
         <TimelineIndicator />
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-8 px-3">
-            Export
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSaveProject}
+            className="h-8 px-3"
+            title="Save project to localStorage"
+          >
+            <Save className="h-4 w-4 mr-1" />
+            Save
           </Button>
-          <Button variant="outline" size="sm" className="h-8 px-3">
-            AI Helper
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportProject}
+            className="h-8 px-3"
+            title="Export project as JSON file"
+          >
+            <Download className="h-4 w-4 mr-1" />
+            JSON
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportToWav}
+            className="h-8 px-3"
+            title="Export project as WAV audio file"
+          >
+            <FileAudio className="h-4 w-4 mr-1" />
+            WAV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleImportProject}
+            className="h-8 px-3"
+            title="Import project from JSON file"
+          >
+            <Upload className="h-4 w-4 mr-1" />
+            Import
           </Button>
         </div>
       </div>
