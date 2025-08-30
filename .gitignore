@@ -8,6 +8,9 @@ yarn-error.log*
 .next/
 out/
 
+.claude/
+.roo/
+
 # Environment variables
 .env
 .env*.local
