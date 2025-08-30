@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme {
+  --radius: 0.5rem;
+  
+  /* Colors - Enhanced for scale degree highlighting */
+  --color-background: oklch(0.09 0.02 264.41);
+  --color-foreground: oklch(0.98 0.01 264.41);
+  --color-card: oklch(0.12 0.02 264.41);
+  --color-card-foreground: oklch(0.98 0.01 264.41);
+  --color-popover: oklch(0.09 0.02 264.41);
+  --color-popover-foreground: oklch(0.98 0.01 264.41);
+  
+  /* Root note - Bright cyan/blue for maximum visibility */
+  --color-primary: oklch(0.7 0.15 220);
+  --color-primary-foreground: oklch(0.09 0.02 264.41);
+  
+  /* Chord tones (3,5,7) - Green for harmonic importance */
+  --color-secondary: oklch(0.6 0.12 140);
+  --color-secondary-foreground: oklch(0.98 0.01 264.41);
+  
+  /* Color tones (2,4,6) - Orange/amber for tension */
+  --color-accent: oklch(0.65 0.15 50);
+  --color-accent-foreground: oklch(0.09 0.02 264.41);
+  
+  /* In-scale notes - Subtle purple tint */
+  --color-muted: oklch(0.25 0.05 280);
+  --color-muted-foreground: oklch(0.65 0.01 264.41);
+  
+  --color-destructive: oklch(0.56 0.24 24.04);
+  --color-destructive-foreground: oklch(0.98 0.01 264.41);
+  --color-border: oklch(0.2 0.02 264.41);
+  --color-input: oklch(0.17 0.02 264.41);
+  --color-ring: oklch(0.7 0.15 220);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom styles for the chiptune studio */
+@layer components {
+  .pattern-grid {
+    @apply bg-card border border-border;
+  }
+  
+  .track-row {
+    @apply border-b border-border hover:bg-accent/50 transition-colors;
+  }
+  
+  .step-cell {
+    @apply border-r border-border w-8 h-8 cursor-pointer hover:bg-accent transition-colors;
+  }
+  
+  .step-cell.active {
+    @apply bg-primary text-primary-foreground;
+  }
+  
+  .transport-bar {
+    @apply bg-card border-b border-border p-4;
+  }
+}
+
+/* Scrollbar styling for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-muted);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent);
+}
