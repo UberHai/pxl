@@ -69,9 +69,9 @@ export default function PatternGrid({
   // Calculate steps based on project bars and current step resolution
   const stepsPerBar = ui.stepRes; // 16 = 16th notes, 8 = 8th notes, etc.
   const steps = overrideSteps || project.meta.bars * stepsPerBar;
-  const stepValue = 4 / ui.stepRes; // Note value in beats (0.25 for 16th, 0.5 for 8th, etc.)
   const [beatsPerBarNumerator] = project.meta.timeSig.split('/').map(Number);
   const beatsPerBar = beatsPerBarNumerator || 4;
+  const stepValue = 4 / ui.stepRes; // Note value in beats (0.25 for 16th, 0.5 for 8th, etc.)
   const stepsPerBeat = Math.max(1, Math.round(stepsPerBar / beatsPerBar));
   
   const [activeNotes, setActiveNotes] = useState<Map<string, string[]>>(new Map()); // step -> array of pitches
@@ -190,15 +190,12 @@ export default function PatternGrid({
             const beats = parts[1] || 0;
             const sixteenths = parts[2] || 0;
             
-            const [numerator] = project.meta.timeSig.split('/').map(Number);
-            const beatsPerBar = numerator || 4;
-            
             positionInBeats = bars * beatsPerBar + beats + sixteenths / 16;
           } else {
             positionInBeats = position as number;
           }
           
-          const step = Math.floor(positionInBeats / stepValue) % steps;
+          const step = Math.floor(positionInBeats / stepValue) % stepsPerBar;
           setCurrentPlayingStep(step);
         } catch (error) {
           console.warn('Failed to update playing step:', error);
@@ -285,7 +282,7 @@ export default function PatternGrid({
       });
 
       // Add to audio scheduler for immediate playback
-      addNote(trackId, noteEvent, ui.stepRes);
+      addNote(trackId, noteEvent);
 
       // Add visual feedback for recently triggered note
       setRecentlyTriggeredNotes(prev => new Set(prev).add(noteKey));

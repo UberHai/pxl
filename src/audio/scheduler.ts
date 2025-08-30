@@ -19,7 +19,7 @@ let currentProject: Project | null = null;
 /**
  * Initialize scheduler with project data
  */
-export function initializeScheduler(project: Project, loopEnabled: boolean = true, stepRes: number = 16): void {
+export function initializeScheduler(project: Project, loopEnabled: boolean = true): void {
   currentProject = project;
   // Clear existing scheduled events
   clearScheduler();
@@ -43,7 +43,7 @@ export function initializeScheduler(project: Project, loopEnabled: boolean = tru
 
       // Schedule notes for this track
       if (track.clips.length > 0) {
-        scheduleTrack(track.id, track.clips, instrument, loopEnabled, stepRes);
+        scheduleTrack(track.id, track.clips, instrument, loopEnabled);
       }
     }
   });
@@ -73,18 +73,26 @@ function applySwing(noteTime: number, swingAmount: number): number {
 /**
  * Schedule all notes for a track
  */
-function scheduleTrack(trackId: string, clips: Clip[], instrument: InstrumentInstance, loopEnabled: boolean = true, stepRes: number = 16): void {
+function scheduleTrack(trackId: string, clips: Clip[], instrument: InstrumentInstance, loopEnabled: boolean = true): void {
   if (!currentProject) return;
 
   const swingAmount = currentProject.meta.swing || 0;
   const [beatsPerBar] = currentProject.meta.timeSig.split('/').map(Number);
 
-  // helpers - BBQ format for all resolutions
+  // helpers - BBQ format with precise fractional handling
   const beatsToBBQ = (totalBeats: number): string => {
     const bars = Math.floor(totalBeats / beatsPerBar);
     const beats = Math.floor(totalBeats % beatsPerBar);
     const fractionalBeats = totalBeats - Math.floor(totalBeats);
-    const sixteenths = Math.max(1, Math.round(fractionalBeats * 4));
+
+    // More precise conversion to avoid timing drift
+    let sixteenths: number;
+    if (fractionalBeats === 0) {
+      sixteenths = 0;
+    } else {
+      sixteenths = Math.max(1, Math.round(fractionalBeats * 4));
+    }
+
     return `${bars}:${beats}:${sixteenths}`;
   };
   const beatsToSubdivisions = (beats: number): number => {
@@ -213,34 +221,27 @@ export function updateTimeSignature(timeSig: string): void {
 /**
  * Update swing amount - requires rescheduling all tracks
  */
-export function updateSwing(swingAmount: number, stepRes: number = 16): void {
+export function updateSwing(swingAmount: number): void {
   if (currentProject) {
     currentProject.meta.swing = swingAmount;
     // Reschedule all tracks to apply new swing
-    initializeScheduler(currentProject, true, stepRes);
+    initializeScheduler(currentProject, true);
   }
 }
 
 /**
  * Add a single note to a track (for real-time input)
  */
-export function addNote(trackId: string, note: NoteEvent, stepRes: number = 16): void {
+export function addNote(trackId: string, note: NoteEvent): void {
   const instrument = activeInstruments.get(trackId);
   if (!instrument) {
     console.warn('No instrument found for track:', trackId);
     return;
   }
 
-  // Calculate duration format based on step resolution
-  let durationString: string;
-  if (stepRes > 16) {
-    // For fine resolutions, use beat time strings for precise duration
-    durationString = `${note.duration}i`;
-  } else {
-    // For coarser resolutions, use BBQ format
-    const durSubdivisions = Math.max(1, Math.round(note.duration * 4));
-    durationString = `0:0:${durSubdivisions}`;
-  }
+  // Calculate duration format
+  const durSubdivisions = Math.max(1, Math.round(note.duration * 4));
+  const durationString = `0:0:${durSubdivisions}`;
 
   // For immediate playback (when clicking notes), just trigger immediately
   if (Tone.Transport.state !== 'started') {
@@ -259,16 +260,10 @@ export function addNote(trackId: string, note: NoteEvent, stepRes: number = 16):
 
   // For scheduled playback during transport, use proper timing
   try {
-    // Use precise timing for fine resolutions
-    let timeString: string;
-    if (stepRes > 16) {
-      timeString = `${note.time}i`; // Use beat units for precision
-    } else {
-      const precision = 4;
-      const subdivisions = Math.max(1, Math.round(note.time * precision));
-      const sixteenths = subdivisions;
-      timeString = `0:0:${Math.max(1, sixteenths)}`;
-    }
+    const precision = 4;
+    const subdivisions = Math.max(1, Math.round(note.time * precision));
+    const sixteenths = subdivisions;
+    const timeString = `0:0:${Math.max(1, sixteenths)}`;
 
     const scheduledEventId: any = Tone.Transport.scheduleOnce((time: number) => {
       try {

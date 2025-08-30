@@ -50,7 +50,7 @@ export default function TransportBar() {
 
     // Update audio engine with new swing value
     if (audioInitialized) {
-      updateSwing(swingValue, ui.stepRes);
+      updateSwing(swingValue);
     }
   };
 
@@ -80,9 +80,9 @@ export default function TransportBar() {
   // Initialize scheduler when audio is ready
   useEffect(() => {
     if (audioInitialized) {
-      initializeScheduler(project, ui.loopEnabled, ui.stepRes);
+      initializeScheduler(project, ui.loopEnabled);
     }
-  }, [audioInitialized, project, ui.loopEnabled, ui.stepRes]);
+  }, [audioInitialized, project, ui.loopEnabled]);
 
   // Sync BPM/time signature changes with Tone.js Transport, Scheduler, and Metronome
   useEffect(() => {
@@ -98,9 +98,9 @@ export default function TransportBar() {
   // Reinitialize scheduler when loop state changes
   useEffect(() => {
     if (audioInitialized) {
-      initializeScheduler(project, ui.loopEnabled, ui.stepRes);
+      initializeScheduler(project, ui.loopEnabled);
     }
-  }, [ui.loopEnabled, audioInitialized, project, ui.stepRes]);
+  }, [ui.loopEnabled, audioInitialized, project]);
 
   // Update loop state for running playback
   useEffect(() => {

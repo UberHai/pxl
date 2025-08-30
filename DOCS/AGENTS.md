@@ -29,7 +29,7 @@ A tracker‑style, pattern‑based sequencer with a modern piano‑roll option, 
 * [ ] Set **BPM** (20–300), **Time Signature** (e.g., 4/4, 3/4, 5/4), **Bars** (1–128) → Transport length updates.
 * [ ] **Key & Scale** selector; snap/quantize notes to scale.
 * [ ] Up to **12 tracks**; per‑track **instrument**, volume, pan, mute/solo.
-* [ ] **Step grid** (resolution 1/1 … 1/32; default 1/16). Click to toggle notes; drag to extend; velocity per note.
+* [ ] **Step grid** (resolution 1/1 … 1/16; default 1/16). Click to toggle notes; drag to extend; velocity per note.
 * [ ] **Piano‑roll** view per clip (toggle from grid).
 * [ ] **Pattern system**: patterns (P1..Pn) can be placed on arrangement timeline.
 * [ ] **Swing** and **quantize** apply globally and per‑track.
@@ -156,7 +156,7 @@ export interface Project {
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-interface UIState { selectedTrackId?: string; isPlaying: boolean; stepRes: 1|2|4|8|16|32; }
+interface UIState { selectedTrackId?: string; isPlaying: boolean; stepRes: 1|2|4|8|16; }
 interface ProjectState { project: Project; ui: UIState; /* actions... */ }
 
 export const useProjectStore = create<ProjectState>()(
