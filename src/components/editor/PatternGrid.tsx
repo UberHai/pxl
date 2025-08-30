@@ -74,30 +74,43 @@ export default function PatternGrid({
   const beatsPerBar = beatsPerBarNumerator || 4;
   const stepsPerBeat = Math.max(1, Math.round(stepsPerBar / beatsPerBar));
   
-  const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set());
+  const [activeNotes, setActiveNotes] = useState<Map<string, string[]>>(new Map()); // step -> array of pitches
   const [currentPlayingStep, setCurrentPlayingStep] = useState<number>(-1);
   const [recentlyTriggeredNotes, setRecentlyTriggeredNotes] = useState<Set<string>>(new Set());
   const [hoveredRow, setHoveredRow] = useState<number>(-1);
+  const [cursorPosition, setCursorPosition] = useState<{ step: number; noteIndex: number }>({ step: 0, noteIndex: 0 });
+  const [zoomLevel, setZoomLevel] = useState<number>(1); // 0.5, 1, 1.5, 2
 
   // Compute highlight pitch classes for the current project key/scale
   const { chord: chordPcs, optional: optionalPcs, scale: scalePcs, rootPc } = useMemo(() => {
     const keyRoot = project.meta.key as any as typeof PITCH_CLASSES[number];
     const scale = (project.meta.scale === 'minor' ? 'minor' : 'major') as 'major' | 'minor';
     const result = computeHighlightPitchClasses(keyRoot, scale);
-    console.log('🎵 Scale highlighting computed:', {
-      key: keyRoot,
-      scale,
-      rootPc: result.rootPc,
-      chordPcs: Array.from(result.chord),
-      optionalPcs: Array.from(result.optional),
-      scalePcs: Array.from(result.scale)
-    });
+    // console.log('🎵 Scale highlighting computed:', {
+    //   key: keyRoot,
+    //   scale,
+    //   rootPc: result.rootPc,
+    //   chordPcs: Array.from(result.chord),
+    //   optionalPcs: Array.from(result.optional),
+    //   scalePcs: Array.from(result.scale)
+    // });
     return result;
   }, [project.meta.key, project.meta.scale]);
 
   // Find the track
   const track = project.tracks.find(t => t.id === trackId);
-  if (!track) return null;
+  if (!track) {
+    // console.log('❌ PatternGrid: Track not found for ID:', trackId);
+    return null;
+  }
+
+  // console.log('🎼 PatternGrid loaded for track:', {
+  //   trackId,
+  //   trackName: track.name,
+  //   instrumentId: track.instrumentId,
+  //   clipsCount: track.clips.length,
+  //   totalNotes: track.clips.reduce((sum, clip) => sum + clip.notes.length, 0)
+  // });
 
   // Initialize active notes from existing track clips
   useEffect(() => {
@@ -115,23 +128,47 @@ export default function PatternGrid({
         clips: [defaultClip]
       });
       
-      setActiveNotes(new Set());
+      setActiveNotes(new Map());
       return;
     }
 
     // Load existing notes from clips into local state for UI
-    const noteSet = new Set<string>();
-    track.clips.forEach(clip => {
-      clip.notes.forEach(note => {
+    const noteMap = new Map<string, string[]>();
+    // console.log('🎼 Loading notes for track:', trackId);
+
+    track.clips.forEach((clip, clipIndex) => {
+      // console.log(`🎼 Clip ${clipIndex}: ${clip.notes.length} notes`);
+      clip.notes.forEach((note, noteIndex) => {
+        // console.log(`🎼 Note ${noteIndex}:`, {
+        //   time: note.time,
+        //   duration: note.duration,
+        //   pitch: note.pitch,
+        //   velocity: note.velocity
+        // });
+
         // Convert note time to step index based on current resolution
         const stepIndex = Math.floor(note.time / stepValue);
-        const noteIndex = NOTES.indexOf(note.pitch);
-        if (noteIndex !== -1 && stepIndex < steps) {
-          noteSet.add(`${stepIndex}-${noteIndex}`);
+
+        // console.log(`🎼 Converting: time ${note.time} -> step ${stepIndex}, pitch ${note.pitch}`);
+
+        if (stepIndex < steps) {
+          const stepKey = stepIndex.toString();
+          if (!noteMap.has(stepKey)) {
+            noteMap.set(stepKey, []);
+          }
+          const pitches = noteMap.get(stepKey)!;
+          if (!pitches.includes(note.pitch)) {
+            pitches.push(note.pitch);
+          }
+        } else {
+          // console.log(`❌ Note conversion failed: stepIndex=${stepIndex}, steps=${steps}`);
         }
       });
     });
-    setActiveNotes(noteSet);
+
+    // console.log(`🎼 Final active notes count:`, Array.from(noteMap.entries()));
+
+    setActiveNotes(noteMap);
   }, [track.clips, trackId, project.meta.bars, updateTrack, stepValue, steps]);
 
   // Track current playing position for visual feedback
@@ -176,7 +213,7 @@ export default function PatternGrid({
   const handleStepClick = (step: number, noteIndex: number) => {
     const noteKey = `${step}-${noteIndex}`;
     const noteName = NOTES[noteIndex];
-    
+
     // Get or create the default clip
     let currentClips = [...track.clips];
     if (currentClips.length === 0) {
@@ -188,11 +225,11 @@ export default function PatternGrid({
         muted: false
       }];
     }
-    
+
     const clip = currentClips[0]; // Use the first clip for now
     const noteTime = step * stepValue; // Time based on current step resolution
-    
-    // Check if note already exists
+
+    // Check if note already exists at this step and pitch
     const existingNoteIndex = clip.notes.findIndex(
       note => Math.floor(note.time / stepValue) === step && note.pitch === noteName
     );
@@ -201,41 +238,54 @@ export default function PatternGrid({
       // Remove existing note
       const updatedNotes = clip.notes.filter((_, index) => index !== existingNoteIndex);
       const updatedClip = { ...clip, notes: updatedNotes };
-      
+
       updateTrack(trackId, {
         clips: [updatedClip, ...currentClips.slice(1)]
       });
-      
+
       setActiveNotes(prev => {
-        const newActive = new Set(prev);
-        newActive.delete(noteKey);
+        const newActive = new Map(prev);
+        const stepKey = step.toString();
+        const pitches = newActive.get(stepKey) || [];
+        const filteredPitches = pitches.filter(p => p !== noteName);
+        if (filteredPitches.length === 0) {
+          newActive.delete(stepKey);
+        } else {
+          newActive.set(stepKey, filteredPitches);
+        }
         return newActive;
       });
     } else {
       // Add new note
+      // Note duration should be independent of step resolution for proper timing
+      // Use a reasonable default duration based on step resolution
+      const defaultDuration = ui.stepRes <= 8 ? 0.5 : 0.25; // 8th note or 16th note
       const noteEvent: NoteEvent = {
         id: `${trackId}-${noteKey}-${Date.now()}`,
         time: noteTime,
-        duration: stepValue, // Duration matches step resolution
+        duration: defaultDuration,
         pitch: noteName,
         velocity: 0.8
       };
 
       const updatedNotes = [...clip.notes, noteEvent];
       const updatedClip = { ...clip, notes: updatedNotes };
-      
+
       updateTrack(trackId, {
         clips: [updatedClip, ...currentClips.slice(1)]
       });
-      
+
       setActiveNotes(prev => {
-        const newActive = new Set(prev);
-        newActive.add(noteKey);
+        const newActive = new Map(prev);
+        const stepKey = step.toString();
+        const pitches = newActive.get(stepKey) || [];
+        pitches.push(noteName);
+        newActive.set(stepKey, pitches);
         return newActive;
       });
 
       // Add to audio scheduler for immediate playback
-      addNote(trackId, noteEvent);
+      addNote(trackId, noteEvent, ui.stepRes);
 
       // Add visual feedback for recently triggered note
       setRecentlyTriggeredNotes(prev => new Set(prev).add(noteKey));
@@ -250,7 +300,16 @@ export default function PatternGrid({
   };
 
   const isStepActive = (step: number, noteIndex: number) => {
-    return activeNotes.has(`${step}-${noteIndex}`);
+    const stepKey = step.toString();
+    const pitches = activeNotes.get(stepKey);
+    if (!pitches) return false;
+    const noteName = NOTES[noteIndex];
+    return pitches.includes(noteName);
+  };
+
+  const getNotesAtStep = (step: number) => {
+    const stepKey = step.toString();
+    return activeNotes.get(stepKey) || [];
   };
 
   const stepResolutions = [
@@ -258,8 +317,7 @@ export default function PatternGrid({
     { value: 2, label: '1/2', name: 'Half' },
     { value: 4, label: '1/4', name: 'Quarter' },
     { value: 8, label: '1/8', name: 'Eighth' },
-    { value: 16, label: '1/16', name: 'Sixteenth' },
-    { value: 32, label: '1/32', name: 'Thirty-second' }
+    { value: 16, label: '1/16', name: 'Sixteenth' }
   ];
 
   const clearPattern = () => {
@@ -271,42 +329,144 @@ export default function PatternGrid({
     }
   };
 
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle keyboard navigation when the pattern grid is focused
+      if (!e.target || !(e.target as HTMLElement).closest('.pattern-grid')) return;
+
+      const { step, noteIndex } = cursorPosition;
+      let newStep = step;
+      let newNoteIndex = noteIndex;
+
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault();
+          newNoteIndex = Math.max(0, noteIndex - 1);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          newNoteIndex = Math.min(rows - 1, noteIndex + 1);
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          newStep = Math.max(0, step - 1);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          newStep = Math.min(steps - 1, step + 1);
+          break;
+        case 'Control':
+          e.preventDefault();
+          handleStepClick(step, noteIndex);
+          break;
+        case 'Enter':
+          e.preventDefault();
+          handleStepClick(step, noteIndex);
+          break;
+        default:
+          return;
+      }
+
+      if (newStep !== step || newNoteIndex !== noteIndex) {
+        setCursorPosition({ step: newStep, noteIndex: newNoteIndex });
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [cursorPosition, rows, steps, handleStepClick]);
+
   return (
-    <div className="pattern-grid bg-card border border-border rounded-lg p-3">
-      <div className="mb-3">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-medium text-foreground">
-            {track.name} - Pattern Grid
-          </h3>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={clearPattern}
-              className="text-xs px-2 py-1 bg-destructive/10 text-destructive rounded hover:bg-destructive/20 transition-colors"
-              title="Clear all notes"
-            >
-              Clear
-            </button>
+    <div className="pattern-grid bg-card border border-border rounded-lg focus-within:ring-2 focus-within:ring-primary/50 focus-within:ring-offset-2" tabIndex={0}>
+      {/* Enhanced Header with Sections */}
+      <div className="p-3 border-b border-border/50">
+        {/* Section 1: Track Info */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <h3 className="text-sm font-semibold text-foreground">
+              {track.name}
+            </h3>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="px-2 py-0.5 bg-muted/50 rounded text-[10px] font-medium">
+                Pattern Grid
+              </span>
+              <span>•</span>
+              <span>{rows}×{steps} steps</span>
+            </div>
           </div>
         </div>
-        
+
+        {/* Section 2: Controls */}
         <div className="flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">
-            {rows} notes × {steps} steps ({project.meta.bars} bars)
-          </p>
-          
+          <div className="flex items-center gap-4">
+            {/* View Mode Toggle */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-muted-foreground">View:</label>
+              <div className="flex bg-muted/30 rounded-md p-0.5">
+                <button className="px-3 py-1 text-xs font-medium bg-background text-foreground rounded border border-border">
+                  Grid
+                </button>
+                <button className="px-3 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  Piano Roll
+                </button>
+              </div>
+            </div>
+
+            {/* Step Resolution */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-muted-foreground">Resolution:</label>
+              <select
+                value={ui.stepRes}
+                onChange={(e) => setStepRes(Number(e.target.value) as any)}
+                className="text-xs bg-background border border-border rounded px-2 py-1 min-w-24"
+              >
+                {stepResolutions.map(res => (
+                  <option key={res.value} value={res.value}>
+                    {res.label} ({res.name})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Zoom Controls */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-muted-foreground">Zoom:</label>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setZoomLevel(Math.max(0.5, zoomLevel - 0.25))}
+                  className="text-xs px-2 py-1 bg-muted/30 rounded hover:bg-muted/50 transition-colors"
+                  title="Zoom out"
+                >
+                  -
+                </button>
+                <span className="text-xs font-mono w-8 text-center">{Math.round(zoomLevel * 100)}%</span>
+                <button
+                  onClick={() => setZoomLevel(Math.min(2, zoomLevel + 0.25))}
+                  className="text-xs px-2 py-1 bg-muted/30 rounded hover:bg-muted/50 transition-colors"
+                  title="Zoom in"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Actions */}
           <div className="flex items-center gap-2">
-            <label className="text-xs text-muted-foreground">Step:</label>
-            <select
-              value={ui.stepRes}
-              onChange={(e) => setStepRes(Number(e.target.value) as any)}
-              className="text-xs bg-muted border border-border rounded px-2 py-1"
+            <div className="text-xs text-muted-foreground flex items-center gap-1">
+              <span className="px-1.5 py-0.5 bg-muted/30 rounded text-[10px]">Arrows</span>
+              <span>Navigate</span>
+              <span className="px-1.5 py-0.5 bg-muted/30 rounded text-[10px]">CTRL</span>
+              <span>Toggle</span>
+            </div>
+            <button
+              onClick={clearPattern}
+              className="text-xs px-3 py-1.5 bg-destructive/10 text-destructive rounded-md hover:bg-destructive/20 transition-colors font-medium"
+              title="Clear all notes"
             >
-              {stepResolutions.map(res => (
-                <option key={res.value} value={res.value}>
-                  {res.label} ({res.name})
-                </option>
-              ))}
-            </select>
+              Clear Pattern
+            </button>
           </div>
         </div>
       </div>
@@ -358,15 +518,16 @@ export default function PatternGrid({
               const labelBorderTop = isOctaveStart ? 'border-t border-accent' : '';
               
               return (
-                <div
-                  key={`label-${index}`}
-                  className={`h-4 box-border flex items-center justify-end text-xs font-mono pr-1 transition-all duration-200 cursor-pointer ${labelText} ${labelBorderTop} ${labelBg}`}
-                  onMouseEnter={() => setHoveredRow(index)}
-                  onMouseLeave={() => setHoveredRow(-1)}
-                >
-                  <span className="text-[10px]">{noteName}</span>
-                  <span className="text-[8px] opacity-70 ml-0.5">{octave}</span>
-                </div>
+                            <div
+              key={`label-${index}`}
+              className={`box-border flex items-center justify-end text-xs font-mono pr-1 transition-all duration-200 cursor-pointer ${labelText} ${labelBorderTop} ${labelBg}`}
+              style={{ height: `${16 * zoomLevel}px` }}
+              onMouseEnter={() => setHoveredRow(index)}
+              onMouseLeave={() => setHoveredRow(-1)}
+            >
+              <span className="text-[10px]">{noteName}</span>
+              <span className="text-[8px] opacity-70 ml-0.5">{octave}</span>
+            </div>
               );
             })}
           </div>
@@ -375,7 +536,7 @@ export default function PatternGrid({
           {Array.from({ length: steps }, (_, step) => (
             <div key={`step-${step}`} className="flex flex-col">
               {/* Step number header */}
-              <div className={`h-6 flex items-center justify-center text-[10px] font-mono border-b border-border ${
+              <div className={`flex items-center justify-center text-[10px] font-mono border-b border-border ${
                 step === currentPlayingStep
                   ? 'text-foreground font-semibold bg-primary/30 border-primary/50'
                   : step % stepsPerBar === 0
@@ -383,7 +544,8 @@ export default function PatternGrid({
                     : step % stepsPerBeat === 0
                       ? 'text-foreground'
                       : 'text-muted-foreground'
-              }`}>
+              }`}
+              style={{ height: `${24 * zoomLevel}px` }}>
                 {step % stepsPerBar === 0
                   ? Math.floor(step / stepsPerBar) + 1
                   : step % stepsPerBeat === 0
@@ -407,20 +569,32 @@ export default function PatternGrid({
                 const isOptionalTone = optionalPcs.has(pc);
                 const isInScale = scalePcs.has(pc);
                 const isHovered = hoveredRow === noteIndex;
-                
+                const isCursorPosition = cursorPosition.step === step && cursorPosition.noteIndex === noteIndex;
+
+                // Check for chord at this step
+                const notesAtStep = getNotesAtStep(step);
+                const isChordStep = notesAtStep.length > 1;
+                const isPartOfChord = isChordStep && isActive;
+
                 // Determine cell styling based on state priority
-                let cellClasses = 'h-4 w-full rounded-sm border box-border transition-all duration-200 relative';
-                
+                let cellClasses = 'w-full rounded-sm border box-border transition-all duration-200 relative';
+                const cellHeight = 16 * zoomLevel;
+
                 if (isActive) {
                   // Active notes override everything
-                  cellClasses += ' bg-primary border-primary shadow-md hover:bg-primary/90';
+                  cellClasses += isPartOfChord
+                    ? ' bg-orange-500 border-orange-400 shadow-md hover:bg-orange-400' // Orange for chord notes
+                    : ' bg-primary border-primary shadow-md hover:bg-primary/90';
                 } else if (isRecentlyTriggered) {
                   // Recently triggered flash
                   cellClasses += ' bg-primary/80 border-primary animate-pulse';
+                } else if (isCursorPosition) {
+                  // Cursor position highlighting
+                  cellClasses += ' bg-primary/20 border-primary/60 ring-1 ring-primary/40';
                 } else {
                   // Scale degree highlighting
                   if (isRoot) {
-                    cellClasses += isHovered 
+                    cellClasses += isHovered
                       ? ' bg-primary/60 border-primary shadow-sm hover:bg-primary/70'
                       : ' bg-primary/40 border-primary/70 hover:bg-primary/50';
                   } else if (isChordTone) {
@@ -442,12 +616,12 @@ export default function PatternGrid({
                       : ' bg-card/50 border-border hover:bg-card/70';
                   }
                 }
-                
+
                 // Add octave markers
                 if (isOctaveStart) {
                   cellClasses += ' border-t-2 border-t-accent';
                 }
-                
+
                 return (
                   <button
                     key={`cell-${step}-${noteIndex}`}
@@ -455,10 +629,15 @@ export default function PatternGrid({
                     onMouseEnter={() => setHoveredRow(noteIndex)}
                     onMouseLeave={() => setHoveredRow(-1)}
                     className={cellClasses}
-                    title={`${note} - Step ${step + 1}${isRoot ? ' (Root)' : isChordTone ? ' (Chord)' : isOptionalTone ? ' (Color)' : isInScale ? ' (In-scale)' : ''}`}
+                    style={{ height: `${cellHeight}px` }}
+                    title={`${note} - Step ${step + 1}${isRoot ? ' (Root)' : isChordTone ? ' (Chord)' : isOptionalTone ? ' (Color)' : isInScale ? ' (In-scale)' : ''}${isActive ? ` - Velocity: ${Math.round(0.8 * 100)}%` : ''}${isChordStep && !isActive ? ` - Chord step (${notesAtStep.length} notes)` : ''}`}
                   >
                     {isActive && (
-                      <div className="absolute inset-0 bg-primary/30 rounded-sm animate-pulse" />
+                      <div className={`absolute inset-0 rounded-sm animate-pulse ${isPartOfChord ? 'bg-orange-500/30' : 'bg-primary/30'}`} />
+                    )}
+                    {/* Show chord indicator */}
+                    {isChordStep && isActive && (
+                      <div className="absolute top-0 right-0 w-2 h-2 bg-orange-400 rounded-full opacity-80" />
                     )}
                   </button>
                 );
@@ -489,6 +668,11 @@ export default function PatternGrid({
         <div className="flex items-center gap-2">
           <span className="inline-block w-4 h-4 rounded-sm bg-card/50 border border-border" />
           <span className="text-muted-foreground">Out-of-scale</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-4 h-4 rounded-sm bg-orange-500 border border-orange-400" />
+          <span className="text-foreground">Chord Note</span>
+          <span className="inline-block w-2 h-2 bg-orange-400 rounded-full ml-1" />
         </div>
       </div>
 

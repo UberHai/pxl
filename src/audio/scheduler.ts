@@ -19,7 +19,7 @@ let currentProject: Project | null = null;
 /**
  * Initialize scheduler with project data
  */
-export function initializeScheduler(project: Project, loopEnabled: boolean = true): void {
+export function initializeScheduler(project: Project, loopEnabled: boolean = true, stepRes: number = 16): void {
   currentProject = project;
   // Clear existing scheduled events
   clearScheduler();
@@ -43,7 +43,7 @@ export function initializeScheduler(project: Project, loopEnabled: boolean = tru
 
       // Schedule notes for this track
       if (track.clips.length > 0) {
-        scheduleTrack(track.id, track.clips, instrument, loopEnabled);
+        scheduleTrack(track.id, track.clips, instrument, loopEnabled, stepRes);
       }
     }
   });
@@ -73,21 +73,22 @@ function applySwing(noteTime: number, swingAmount: number): number {
 /**
  * Schedule all notes for a track
  */
-function scheduleTrack(trackId: string, clips: Clip[], instrument: InstrumentInstance, loopEnabled: boolean = true): void {
+function scheduleTrack(trackId: string, clips: Clip[], instrument: InstrumentInstance, loopEnabled: boolean = true, stepRes: number = 16): void {
   if (!currentProject) return;
 
   const swingAmount = currentProject.meta.swing || 0;
   const [beatsPerBar] = currentProject.meta.timeSig.split('/').map(Number);
 
-  // helpers
+  // helpers - BBQ format for all resolutions
   const beatsToBBQ = (totalBeats: number): string => {
     const bars = Math.floor(totalBeats / beatsPerBar);
     const beats = Math.floor(totalBeats % beatsPerBar);
-    const sixteenths = Math.round((totalBeats - Math.floor(totalBeats)) * 4);
+    const fractionalBeats = totalBeats - Math.floor(totalBeats);
+    const sixteenths = Math.max(1, Math.round(fractionalBeats * 4));
     return `${bars}:${beats}:${sixteenths}`;
   };
-  const beatsToSixteenths = (beats: number): number => {
-    return Math.max(1, Math.round(beats * 4));
+  const beatsToSubdivisions = (beats: number): number => {
+    return Math.max(1, Math.round(beats * 4)); // Always 4 sixteenths per beat
   };
 
   type ScheduledEvent = { timeBBQ: string; note: NoteEvent; durBBQ: string };
@@ -98,8 +99,8 @@ function scheduleTrack(trackId: string, clips: Clip[], instrument: InstrumentIns
     clip.notes.forEach((note) => {
       const swungBeats = applySwing(clip.start + note.time, swingAmount);
       const timeBBQ = beatsToBBQ(swungBeats);
-      const durSixteenths = beatsToSixteenths(note.duration);
-      const durBBQ = `0:0:${durSixteenths}`;
+      const durSubdivisions = beatsToSubdivisions(note.duration);
+      const durBBQ = `0:0:${durSubdivisions}`;
       events.push({ timeBBQ, note, durBBQ });
     });
   });
@@ -212,22 +213,33 @@ export function updateTimeSignature(timeSig: string): void {
 /**
  * Update swing amount - requires rescheduling all tracks
  */
-export function updateSwing(swingAmount: number): void {
+export function updateSwing(swingAmount: number, stepRes: number = 16): void {
   if (currentProject) {
     currentProject.meta.swing = swingAmount;
     // Reschedule all tracks to apply new swing
-    initializeScheduler(currentProject, true);
+    initializeScheduler(currentProject, true, stepRes);
   }
 }
 
 /**
  * Add a single note to a track (for real-time input)
  */
-export function addNote(trackId: string, note: NoteEvent): void {
+export function addNote(trackId: string, note: NoteEvent, stepRes: number = 16): void {
   const instrument = activeInstruments.get(trackId);
   if (!instrument) {
     console.warn('No instrument found for track:', trackId);
     return;
+  }
+
+  // Calculate duration format based on step resolution
+  let durationString: string;
+  if (stepRes > 16) {
+    // For fine resolutions, use beat time strings for precise duration
+    durationString = `${note.duration}i`;
+  } else {
+    // For coarser resolutions, use BBQ format
+    const durSubdivisions = Math.max(1, Math.round(note.duration * 4));
+    durationString = `0:0:${durSubdivisions}`;
   }
 
   // For immediate playback (when clicking notes), just trigger immediately
@@ -235,7 +247,7 @@ export function addNote(trackId: string, note: NoteEvent): void {
     try {
       instrument.trigger(
         note.pitch,
-        `0:0:${Math.max(1, Math.round(note.duration * 4))}`,
+        durationString,
         undefined, // Immediate playback
         note.velocity
       );
@@ -247,19 +259,29 @@ export function addNote(trackId: string, note: NoteEvent): void {
 
   // For scheduled playback during transport, use proper timing
   try {
-    const scheduleTime: any = "+0.02"; // small safety delay in transport time
+    // Use precise timing for fine resolutions
+    let timeString: string;
+    if (stepRes > 16) {
+      timeString = `${note.time}i`; // Use beat units for precision
+    } else {
+      const precision = 4;
+      const subdivisions = Math.max(1, Math.round(note.time * precision));
+      const sixteenths = subdivisions;
+      timeString = `0:0:${Math.max(1, sixteenths)}`;
+    }
+
     const scheduledEventId: any = Tone.Transport.scheduleOnce((time: number) => {
       try {
         instrument.trigger(
           note.pitch,
-          `0:0:${Math.max(1, Math.round(note.duration * 4))}`,
+          durationString,
           time,
           note.velocity
         );
       } catch (error) {
         console.warn('Failed to trigger scheduled note:', error);
       }
-    }, scheduleTime);
+    }, timeString);
 
     // Store the scheduled event for cleanup if needed
     if (!scheduledEvents.has(trackId)) {

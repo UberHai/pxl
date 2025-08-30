@@ -5,7 +5,7 @@ import { setMetronomeEnabled, updateMetronomeTiming } from '@/audio/scheduler';
 interface UIState {
   selectedTrackId?: string;
   isPlaying: boolean;
-  stepRes: 1 | 2 | 4 | 8 | 16 | 32; // Step resolution (1 = whole note, 16 = 16th note)
+  stepRes: 1 | 2 | 4 | 8 | 16; // Step resolution (1 = whole note, 16 = 16th note)
   currentView: 'pattern' | 'piano' | 'automation' | 'mixer';
   playbackPosition: number; // beats
   loopEnabled: boolean;
@@ -33,7 +33,7 @@ interface ProjectState {
   setSwing: (swing: number) => void;
   
   // Track actions
-  addTrack: () => void;
+  addTrack: () => string | undefined;
   removeTrack: (trackId: string) => void;
   updateTrack: (trackId: string, updates: Partial<Track>) => void;
   selectTrack: (trackId: string) => void;
@@ -182,32 +182,37 @@ export const useProjectStore = create<ProjectState>((set, get) => {
     })),
 
     // Track actions
-    addTrack: () => set((state) => {
-      const trackCount = state.project.tracks.length;
-      if (trackCount >= 12) return state; // Max 12 tracks
+    addTrack: () => {
+      let newTrackId: string | undefined;
+      set((state) => {
+        const trackCount = state.project.tracks.length;
+        if (trackCount >= 12) return state; // Max 12 tracks
 
-      const newTrack = createDefaultTrack(
-        `track-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        `Track ${trackCount + 1}`,
-        'pulse12' // Default instrument
-      );
-      
-      return {
-        ...state,
-        project: {
-          ...state.project,
-          tracks: [...state.project.tracks, newTrack],
-          meta: {
-            ...state.project.meta,
-            updatedAt: Date.now()
+        const newTrack = createDefaultTrack(
+          `track-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          `Track ${trackCount + 1}`,
+          'pulse12' // Default instrument
+        );
+        newTrackId = newTrack.id;
+
+        return {
+          ...state,
+          project: {
+            ...state.project,
+            tracks: [...state.project.tracks, newTrack],
+            meta: {
+              ...state.project.meta,
+              updatedAt: Date.now()
+            }
+          },
+          ui: {
+            ...state.ui,
+            selectedTrackId: newTrack.id
           }
-        },
-        ui: {
-          ...state.ui,
-          selectedTrackId: newTrack.id
-        }
-      };
-    }),
+        };
+      });
+      return newTrackId;
+    },
 
     removeTrack: (trackId) => set((state) => {
       const tracks = state.project.tracks.filter(t => t.id !== trackId);

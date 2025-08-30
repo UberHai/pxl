@@ -102,25 +102,31 @@ export default function TimelineIndicator() {
   });
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1 bg-muted/30 rounded-md">
-      <div className="flex items-center gap-1">
+    <div className="flex items-center gap-3">
+      {/* Status & Position */}
+      <div className="flex items-center gap-2">
         <div className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground/50'}`} />
-        <span className="text-xs font-medium text-muted-foreground">
-          {isPlaying ? 'Playing' : 'Stopped'}
-        </span>
+        <div className="flex items-center gap-1 text-xs">
+          <span className="font-mono text-foreground font-medium">
+            {String(currentStep + 1).padStart(3, '0')}
+          </span>
+          <span className="text-muted-foreground">/</span>
+          <span className="font-mono text-muted-foreground">
+            {String(totalSteps).padStart(3, '0')}
+          </span>
+        </div>
       </div>
-      
-      <div className="flex gap-0.5 max-w-80 overflow-hidden p-1 bg-background/50 rounded">
+
+      {/* Mini Timeline */}
+      <div className="flex gap-px max-w-48 overflow-hidden p-1 bg-muted/20 rounded-sm border border-border/50">
         {squares}
       </div>
-      
-      <div className="flex items-center gap-1">
-        <span className="text-xs font-mono text-foreground font-medium">
-          {currentStep + 1}
-        </span>
-        <span className="text-xs text-muted-foreground">/</span>
-        <span className="text-xs font-mono text-muted-foreground">
-          {totalSteps}
+
+      {/* Time Display */}
+      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <span className="font-medium">{isPlaying ? '▶' : '⏸'}</span>
+        <span className="font-mono">
+          {Math.floor((currentStep / totalSteps) * 100)}%
         </span>
       </div>
     </div>

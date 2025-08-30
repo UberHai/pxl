@@ -7,6 +7,10 @@ import TransportBar from '@/components/transport/TransportBar';
 import TrackList from '@/components/tracks/TrackList';
 import PatternGrid from '@/components/editor/PatternGrid';
 import { Button } from '@/components/ui/button';
+import { Modal, ModalContent, ModalDescription, ModalTitle, ModalTrigger } from '@/components/ui/modal';
+import AIHelper from '@/components/ai/ai-helper';
+import LogCapture from '@/components/debug/log-capture';
+import { Sparkles } from 'lucide-react';
 
 
 export default function Home() {
@@ -18,52 +22,25 @@ export default function Home() {
   // Initialize keyboard shortcuts
   useKeyboardShortcuts();
 
-  // Debug logging - ENABLED for debugging
-  console.log('🔍 RENDER DEBUG:', { 
-    store,
-    project, 
-    ui,
-    hasProject: !!project, 
-    hasUi: !!ui, 
-    hasMeta: !!project?.meta,
-    projectKeys: project ? Object.keys(project) : 'no project',
-    uiKeys: ui ? Object.keys(ui) : 'no ui',
-    metaKeys: project?.meta ? Object.keys(project.meta) : 'no meta',
-    isLoading,
-    hasError,
-    timestamp: new Date().toISOString()
-  });
+
 
   // Loading timeout to prevent infinite loading
   useEffect(() => {
-    console.log('🕐 TIMEOUT EFFECT:', { project, ui, hasUi: !!ui, hasMeta: !!project?.meta });
-    
     const timer = setTimeout(() => {
-      console.log('⏰ TIMEOUT TRIGGERED after 5s:', { project, ui, hasUi: !!ui, hasMeta: !!project?.meta });
       if (!project || !ui || !project.meta) {
-        console.log('❌ SETTING ERROR STATE - missing required fields');
         setHasError(true);
         setIsLoading(false);
       }
     }, 5000); // 5 second timeout
 
     return () => {
-      console.log('🧹 TIMEOUT CLEANUP');
       clearTimeout(timer);
     };
   }, [project, ui]);
 
   // Mark as loaded when store is ready
   useEffect(() => {
-    console.log('✅ READY CHECK:', { 
-      project: !!project, 
-      ui: !!ui, 
-      meta: !!project?.meta,
-      allReady: !!(project && ui && project.meta)
-    });
-    
     if (project && ui && project.meta) {
-      console.log('🎉 ALL READY - setting loaded state');
       setIsLoading(false);
       setHasError(false);
     }
@@ -154,15 +131,38 @@ export default function Home() {
                       Select a track from the sidebar to edit its pattern
                     </p>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    <div className="bg-muted/50 rounded p-2 space-y-1">
-                      <div className="font-semibold">Shortcuts:</div>
-                      <div>Space: Play/Pause</div>
-                      <div>M: Metronome</div>
-                      <div>L: Loop</div>
-                      <div>S: Stop</div>
-                      <div>↑/↓: Select Track</div>
-                      <div>1-9: Select Track #</div>
+                  <div className="flex items-center gap-4">
+                    {/* AI Helper Button */}
+                    <Modal>
+                      <ModalTrigger asChild>
+                        <Button variant="outline" size="sm" className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4" />
+                          AI Helper
+                        </Button>
+                      </ModalTrigger>
+                      <ModalContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                        <ModalTitle>AI Music Helper</ModalTitle>
+                        <ModalDescription>
+                          Use AI to generate musical ideas and patterns for your chiptune compositions.
+                        </ModalDescription>
+                        <AIHelper />
+                      </ModalContent>
+                    </Modal>
+
+                    <div className="text-xs text-muted-foreground">
+                      <div className="bg-muted/50 rounded p-2 space-y-1">
+                        <div className="font-semibold">Global Shortcuts:</div>
+                        <div>Space: Play/Pause</div>
+                        <div>M: Metronome</div>
+                        <div>L: Loop</div>
+                        <div>S: Stop</div>
+                        <div>↑/↓: Select Track</div>
+                        <div>1-9: Select Track #</div>
+                        <div className="font-semibold mt-2">Pattern Grid:</div>
+                        <div>Arrows: Navigate</div>
+                        <div>CTRL: Toggle Note</div>
+                        <div>Enter: Toggle Note</div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -190,6 +190,9 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* Log Capture */}
+      <LogCapture />
     </main>
   );
 }
