@@ -66,7 +66,7 @@ interface ProjectState {
 
   // Audio export actions
   exportToWav: (options?: any) => Promise<void>;
-  exportToMidi: () => Promise<void>;
+  exportToMidi: (options?: any) => Promise<void>;
 }
 
 // Create default project
@@ -103,17 +103,7 @@ const createDefaultTrack = (id: string, name: string, instrumentId: string): Tra
 
 // Auto-save throttle
 let autoSaveTimeout: NodeJS.Timeout | null = null;
-const AUTO_SAVE_DELAY = 2000; // 2 seconds
-
-const triggerAutoSave = () => {
-  if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
-  autoSaveTimeout = setTimeout(() => {
-    const state = get();
-    if (state.saveProject) {
-      state.saveProject();
-    }
-  }, AUTO_SAVE_DELAY);
-};
+const AUTO_SAVE_DELAY = 2000; // 2 seconds;
 
 // Load from localStorage on initialization
 const loadFromLocalStorage = (): Partial<ProjectState> => {
@@ -144,6 +134,17 @@ const loadFromLocalStorage = (): Partial<ProjectState> => {
 
 export const useProjectStore = create<ProjectState>((set, get) => {
   console.log('🏪 ZUSTAND STORE CREATING...');
+
+  // Auto-save throttle function
+  const triggerAutoSave = () => {
+    if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
+    autoSaveTimeout = setTimeout(() => {
+      const state = get();
+      if (state.saveProject) {
+        state.saveProject();
+      }
+    }, AUTO_SAVE_DELAY);
+  };
 
   // Initialize with saved data
   const savedData = loadFromLocalStorage();
@@ -608,10 +609,13 @@ export const useProjectStore = create<ProjectState>((set, get) => {
       });
     },
 
-    exportToMidi: async () => {
-      // TODO: Implement MIDI export
-      console.log('MIDI export not yet implemented');
-      throw new Error('MIDI export not yet implemented');
+    exportToMidi: async (options = {}) => {
+      const { exportProjectToMidi } = await import('@/audio/export');
+      const state = get();
+      await exportProjectToMidi(state.project, options, (progress, status) => {
+        console.log(`MIDI export progress: ${progress}% - ${status}`);
+        // Could add a progress state here if needed
+      });
     },
   };
 });

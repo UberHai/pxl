@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { useProjectStore } from '@/state/useProjectStore';
-import { Play, Pause, Square, Timer, Repeat, Save, Upload, Download, FileAudio } from 'lucide-react';
+import { Play, Pause, Square, Timer, Repeat, Save, Upload, Download, FileAudio, Music } from 'lucide-react';
 import TimelineIndicator from './TimelineIndicator';
 import {
   initializeAudioContext,
@@ -39,7 +39,8 @@ export default function TransportBar() {
     saveProject,
     exportProject,
     importProject,
-    exportToWav
+    exportToWav,
+    exportToMidi
   } = useProjectStore();
 
   const audioInitialized = audio.audioInitialized;
@@ -177,6 +178,15 @@ export default function TransportBar() {
       console.log('WAV export completed successfully');
     } catch (error) {
       console.error('Failed to export WAV:', error);
+    }
+  };
+
+  const handleExportToMidi = async () => {
+    try {
+      await exportToMidi();
+      console.log('MIDI export completed successfully');
+    } catch (error) {
+      console.error('Failed to export MIDI:', error);
     }
   };
 
@@ -393,6 +403,16 @@ export default function TransportBar() {
           >
             <FileAudio className="h-4 w-4 mr-1" />
             WAV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportToMidi}
+            className="h-8 px-3"
+            title="Export project as MIDI file"
+          >
+            <Music className="h-4 w-4 mr-1" />
+            MIDI
           </Button>
           <Button
             variant="outline"

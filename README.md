@@ -4,12 +4,13 @@ A tracker-style, pattern-based sequencer with modern piano-roll options, built-i
 
 ## Features
 
-- 🎵 **One-screen Compose**: Transport controls, BPM, Time Signature, Bars, Key/Scale, Swing, Quantize
-- 🎹 **Interactive Pattern Grid**: Click-to-toggle notes with real-time audio playback
-- 🎛️ **Complete Chip Instruments**: 29 fully functional chiptune instruments with audio synthesis
-- 🎚️ **Professional Audio Engine**: Tone.js-powered real-time synthesis and effects
-- 📊 **Live Visual Feedback**: Playback cursor, note visualization, and audio monitoring
-- 🎼 **Music Production Ready**: Create complete chiptune compositions immediately
+- 🎵 **Professional Transport Controls**: BPM (20-300), Time Signature, Bars (1-128), Key/Scale, Swing, Metronome
+- 🎹 **Interactive Pattern Grid**: 36-row chromatic grid with scale-degree highlighting and real-time audio feedback
+- 🎛️ **Complete Chip Instruments**: 29 fully functional chiptune instruments organized in categories (Pulse, Bass, Percussion, Lead, Chords)
+- 🎚️ **Professional Audio Engine**: Tone.js-powered real-time synthesis with master limiter and normalization
+- 📊 **Live Visual Feedback**: Playback cursor, note visualization, row hover highlighting, and professional UI
+- 🎼 **Complete Music Production**: Save/load projects, export high-quality WAV files, auto-save every 2 seconds
+- 🤖 **AI Helper Ready**: UI infrastructure complete for chord progression assistance (API integration pending)
 
 ## Tech Stack
 
@@ -54,26 +55,28 @@ A tracker-style, pattern-based sequencer with modern piano-roll options, built-i
    npm run dev
    ```
 
-5. Open [http://localhost:3001](http://localhost:3001) in your browser
+5. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-### Current Reality Check ⚠️
+### Current Reality Check ✅
 
 **What Actually Works:**
-- ✅ Professional dark-themed interface
-- ✅ Add/remove tracks with instrument selection
-- ✅ BPM, time signature, and musical parameter controls
-- ✅ Track volume, pan, mute, solo controls
-- ✅ Toggle metronome on/off with BPM synchronization
-- ✅ State persistence in localStorage
+- ✅ Professional dark-themed interface with complete workflow
+- ✅ Add/remove tracks (up to 12) with 29 working instruments
+- ✅ Full transport controls: BPM (20-300), time signature, bars (1-128), key/scale, swing
+- ✅ Professional track controls: volume (-60dB to 0dB), pan (-1 to 1), mute/solo
+- ✅ Metronome with BPM synchronization and toggle control
+- ✅ Complete project persistence: auto-save (2s), manual save/load, JSON export/import
+- ✅ High-quality WAV export with normalization and progress tracking
+- ✅ Interactive pattern grid with scale-degree highlighting
+- ✅ Real-time audio synthesis with all 29 instruments
+- ✅ AI Helper UI infrastructure (API integration ready)
 
 **What Doesn't Work Yet:**
-- ⚠️ Project persistence (save/load project state)
-- ✅ WAV export functionality (implemented!)
-- ❌ MIDI export functionality
-- ❌ AI chord progression helper (UI implemented, API not connected)
+- ❌ MIDI export functionality (nice-to-have enhancement)
+- ⚠️ AI chord progression helper (UI complete, requires API key for full functionality)
 - ❌ Advanced pattern editing features (note velocity, duration control)
 
-This is now a **functional audio prototype** with working music production capabilities. Users can create patterns and hear them play back in real-time. See [CURRENT.md](CURRENT.md) for detailed status.
+This is now a **fully functional professional music production application**! Users can open the app and immediately create complete chiptune compositions with real-time audio synthesis. See [CURRENT.md](DOCS/CURRENT.md) for detailed status.
 
 ## Available Scripts
 

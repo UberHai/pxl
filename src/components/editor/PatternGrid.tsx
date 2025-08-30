@@ -11,6 +11,83 @@ import { addNote } from '@/audio/scheduler';
 import { NoteEvent } from '@/types/song';
 import * as Tone from 'tone';
 
+// Note Context Menu Component
+interface NoteContextMenuProps {
+  menu: { x: number; y: number; step: number; noteIndex: number; note?: NoteEvent };
+  onClose: () => void;
+  onVelocityChange: (velocity: number) => void;
+  onDelete: () => void;
+}
+
+function NoteContextMenu({ menu, onClose, onVelocityChange, onDelete }: NoteContextMenuProps) {
+  const [velocity, setVelocity] = useState(menu.note?.velocity || 0.8);
+
+  const handleVelocityChange = (newVelocity: number) => {
+    setVelocity(newVelocity);
+    onVelocityChange(newVelocity);
+  };
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.note-context-menu')) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [onClose]);
+
+  return (
+    <div
+      className="note-context-menu fixed z-50 bg-card border border-border rounded-lg shadow-lg p-3 min-w-48"
+      style={{ left: menu.x, top: menu.y }}
+    >
+      <div className="space-y-3">
+        {/* Note Info */}
+        <div className="text-sm font-medium text-foreground">
+          Note Properties
+        </div>
+
+        {/* Velocity Control */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium text-muted-foreground">Velocity</label>
+            <span className="text-xs text-muted-foreground">{Math.round(velocity * 100)}%</span>
+          </div>
+          <input
+            type="range"
+            min="0.1"
+            max="1"
+            step="0.05"
+            value={velocity}
+            onChange={(e) => handleVelocityChange(parseFloat(e.target.value))}
+            className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+          />
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>10%</span>
+            <span>50%</span>
+            <span>100%</span>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="border-t border-border pt-2">
+          <button
+            onClick={() => {
+              onDelete();
+              onClose();
+            }}
+            className="w-full text-left px-2 py-1 text-sm text-destructive hover:bg-destructive/10 rounded"
+          >
+            Delete Note
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface PatternGridProps {
   trackId: string;
   steps?: number;
@@ -67,11 +144,11 @@ export default function PatternGrid({
   const { project, ui, updateTrack, setStepRes } = useProjectStore();
   
   // Calculate steps based on project bars and current step resolution
-  const stepsPerBar = ui.stepRes; // 16 = 16th notes, 8 = 8th notes, etc.
+  const stepsPerBar = ui?.stepRes || 16; // 16 = 16th notes, 8 = 8th notes, etc.
   const steps = overrideSteps || project.meta.bars * stepsPerBar;
   const [beatsPerBarNumerator] = project.meta.timeSig.split('/').map(Number);
   const beatsPerBar = beatsPerBarNumerator || 4;
-  const stepValue = 4 / ui.stepRes; // Note value in beats (0.25 for 16th, 0.5 for 8th, etc.)
+  const stepValue = ui?.stepRes ? 4 / ui.stepRes : 0.25; // Note value in beats (0.25 for 16th, 0.5 for 8th, etc.)
   const stepsPerBeat = Math.max(1, Math.round(stepsPerBar / beatsPerBar));
   
   const [activeNotes, setActiveNotes] = useState<Map<string, string[]>>(new Map()); // step -> array of pitches
@@ -80,6 +157,7 @@ export default function PatternGrid({
   const [hoveredRow, setHoveredRow] = useState<number>(-1);
   const [cursorPosition, setCursorPosition] = useState<{ step: number; noteIndex: number }>({ step: 0, noteIndex: 0 });
   const [zoomLevel, setZoomLevel] = useState<number>(1); // 0.5, 1, 1.5, 2
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; step: number; noteIndex: number; note?: NoteEvent } | null>(null);
 
   // Compute highlight pitch classes for the current project key/scale
   const { chord: chordPcs, optional: optionalPcs, scale: scalePcs, rootPc } = useMemo(() => {
@@ -173,7 +251,7 @@ export default function PatternGrid({
 
   // Track current playing position for visual feedback
   useEffect(() => {
-    if (!ui.isPlaying) {
+    if (!ui?.isPlaying) {
       setCurrentPlayingStep(-1);
       return;
     }
@@ -207,7 +285,34 @@ export default function PatternGrid({
     return () => clearInterval(interval);
   }, [ui.isPlaying, stepValue, steps, project.meta.timeSig]);
 
-  const handleStepClick = (step: number, noteIndex: number) => {
+  const handleStepClick = (step: number, noteIndex: number, event?: React.MouseEvent) => {
+    // Handle right-click for context menu
+    if (event && event.type === 'contextmenu') {
+      event.preventDefault();
+
+      // Find existing note if any
+      const noteName = NOTES[noteIndex];
+      const stepKey = step.toString();
+      const pitches = activeNotes.get(stepKey) || [];
+      const hasNote = pitches.includes(noteName);
+
+      let existingNote: NoteEvent | undefined;
+      if (hasNote && track.clips.length > 0) {
+        existingNote = track.clips[0].notes.find(
+          note => Math.floor(note.time / stepValue) === step && note.pitch === noteName
+        );
+      }
+
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        step,
+        noteIndex,
+        note: existingNote
+      });
+      return;
+    }
+
     const noteKey = `${step}-${noteIndex}`;
     const noteName = NOTES[noteIndex];
 
@@ -256,7 +361,7 @@ export default function PatternGrid({
       // Add new note
       // Note duration should be independent of step resolution for proper timing
       // Use a reasonable default duration based on step resolution
-      const defaultDuration = ui.stepRes <= 8 ? 0.5 : 0.25; // 8th note or 16th note
+      const defaultDuration = ui?.stepRes ? (ui.stepRes <= 8 ? 0.5 : 0.25) : 0.25; // 8th note or 16th note (fallback to 16th)
       const noteEvent: NoteEvent = {
         id: `${trackId}-${noteKey}-${Date.now()}`,
         time: noteTime,
@@ -324,6 +429,47 @@ export default function PatternGrid({
         clips: [clearedClip, ...track.clips.slice(1)]
       });
     }
+  };
+
+  // Handle velocity change
+  const handleVelocityChange = (step: number, noteIndex: number, velocity: number) => {
+    const noteName = NOTES[noteIndex];
+    const noteTime = step * stepValue;
+
+    if (track.clips.length === 0) return;
+
+    const clip = track.clips[0];
+    const existingNoteIndex = clip.notes.findIndex(
+      note => Math.abs(note.time - noteTime) < stepValue / 2 && note.pitch === noteName
+    );
+
+    if (existingNoteIndex !== -1) {
+      // Update existing note velocity
+      const updatedNotes = clip.notes.map((note, index) =>
+        index === existingNoteIndex ? { ...note, velocity } : note
+      );
+
+      updateTrack(trackId, {
+        clips: [{ ...clip, notes: updatedNotes }]
+      });
+    }
+  };
+
+  // Handle note deletion
+  const handleDeleteNote = (step: number, noteIndex: number) => {
+    const noteName = NOTES[noteIndex];
+    const noteTime = step * stepValue;
+
+    if (track.clips.length === 0) return;
+
+    const clip = track.clips[0];
+    const updatedNotes = clip.notes.filter(
+      note => !(Math.abs(note.time - noteTime) < stepValue / 2 && note.pitch === noteName)
+    );
+
+    updateTrack(trackId, {
+      clips: [{ ...clip, notes: updatedNotes }]
+    });
   };
 
   // Keyboard navigation
@@ -414,7 +560,7 @@ export default function PatternGrid({
             <div className="flex items-center gap-2">
               <label className="text-xs font-medium text-muted-foreground">Resolution:</label>
               <select
-                value={ui.stepRes}
+                value={ui?.stepRes || 16}
                 onChange={(e) => setStepRes(Number(e.target.value) as any)}
                 className="text-xs bg-background border border-border rounded px-2 py-1 min-w-24"
               >
@@ -622,12 +768,13 @@ export default function PatternGrid({
                 return (
                   <button
                     key={`cell-${step}-${noteIndex}`}
-                    onClick={() => handleStepClick(step, noteIndex)}
+                    onClick={(e) => handleStepClick(step, noteIndex, e)}
+                    onContextMenu={(e) => handleStepClick(step, noteIndex, e)}
                     onMouseEnter={() => setHoveredRow(noteIndex)}
                     onMouseLeave={() => setHoveredRow(-1)}
                     className={cellClasses}
                     style={{ height: `${cellHeight}px` }}
-                    title={`${note} - Step ${step + 1}${isRoot ? ' (Root)' : isChordTone ? ' (Chord)' : isOptionalTone ? ' (Color)' : isInScale ? ' (In-scale)' : ''}${isActive ? ` - Velocity: ${Math.round(0.8 * 100)}%` : ''}${isChordStep && !isActive ? ` - Chord step (${notesAtStep.length} notes)` : ''}`}
+                    title={`${note} - Step ${step + 1}${isRoot ? ' (Root)' : isChordTone ? ' (Chord)' : isOptionalTone ? ' (Color)' : isInScale ? ' (In-scale)' : ''}${isActive ? ` - Velocity: ${Math.round((contextMenu?.note?.velocity || 0.8) * 100)}%` : ''}${isChordStep && !isActive ? ` - Chord step (${notesAtStep.length} notes)` : ''}`}
                   >
                     {isActive && (
                       <div className={`absolute inset-0 rounded-sm animate-pulse ${isPartOfChord ? 'bg-orange-500/30' : 'bg-primary/30'}`} />
@@ -674,7 +821,7 @@ export default function PatternGrid({
       </div>
 
       {/* Current step indicator */}
-      {ui.isPlaying && (
+      {ui?.isPlaying && (
         <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
@@ -683,6 +830,16 @@ export default function PatternGrid({
           <span>•</span>
           <span>{rows} notes × {steps} steps</span>
         </div>
+      )}
+
+      {/* Context Menu for Note Properties */}
+      {contextMenu && (
+        <NoteContextMenu
+          menu={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onVelocityChange={(velocity) => handleVelocityChange(contextMenu.step, contextMenu.noteIndex, velocity)}
+          onDelete={() => handleDeleteNote(contextMenu.step, contextMenu.noteIndex)}
+        />
       )}
     </div>
   );

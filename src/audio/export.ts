@@ -1,12 +1,13 @@
 /**
  * PXL Chiptune Studio - Audio Export Utilities
- * Handles WAV and other audio format exports using Tone.Offline
+ * Handles WAV and MIDI export using Tone.Offline and @tonejs/midi
  */
 
 import * as Tone from 'tone';
+import { Midi } from '@tonejs/midi';
 import { Project } from '@/types/song';
-import { createInstrument } from './instrument-registry';
-import { getMasterOutput } from './engine';
+import { createInstrument, ALL_INSTRUMENTS } from './instrument-registry';
+import { getMasterOutput, initializeAudioContext } from './engine';
 
 /**
  * Convert AudioBuffer to WAV Blob
@@ -76,9 +77,9 @@ export type ExportProgressCallback = (progress: number, status: string) => void;
 async function buildOfflineTransport(project: Project): Promise<{
   dispose: () => void;
   duration: number;
+  trackConfigs: Map<string, any>;
+  transportEvents: any[];
 }> {
-  const instruments: Map<string, any> = new Map();
-
   // Calculate total duration in seconds
   const timeSigParts = project.meta.timeSig.split('/');
   const beatsPerBar = parseInt(timeSigParts[0]);
@@ -86,64 +87,81 @@ async function buildOfflineTransport(project: Project): Promise<{
   const totalBeats = project.meta.bars * (beatsPerBar / beatUnit) * 4; // Convert to quarter notes
   const duration = (totalBeats / project.meta.bpm) * 60;
 
-  // Create instruments for each track
+  // Don't create instruments here - we'll create them in the offline context
+  const instruments: Map<string, any> = new Map();
+
+  // Store track information for later instrument creation
+  const trackConfigs: Map<string, any> = new Map();
   for (const track of project.tracks) {
     if (track.clips.length > 0) {
-      const instrument = createInstrument(track.instrumentId);
-      if (instrument) {
-        instruments.set(track.id, instrument);
-
-        // Connect to master output
-        instrument.channel.volume.value = track.volume;
-        instrument.channel.pan.value = track.pan;
-        instrument.channel.mute = track.mute;
-        instrument.channel.connect(getMasterOutput());
-      }
+      console.log(`🎼 Processing track: ${track.name} (${track.id}) with instrument: ${track.instrumentId}`);
+      trackConfigs.set(track.id, {
+        instrumentId: track.instrumentId,
+        name: track.name,
+        volume: track.volume,
+        pan: track.pan,
+        mute: track.mute
+      });
     }
   }
 
   // Schedule all notes
   const transportEvents: any[] = [];
+  let totalNotes = 0;
+
+  console.log('🎵 Export: Processing tracks:', project.tracks.length);
 
   for (const track of project.tracks) {
-    const instrument = instruments.get(track.id);
-    if (!instrument) continue;
+    // Only process tracks that have clips with notes
+    const hasNotes = track.clips.some(clip => clip.notes.length > 0);
+    if (!hasNotes) {
+      console.log(`🎼 Skipping track: ${track.name} (${track.id}) - no notes`);
+      continue;
+    }
 
-    for (const clip of track.clips) {
+    console.log(`🎼 Export: Processing track ${track.name} (${track.id}) with ${track.clips.length} clips`);
+
+          for (const clip of track.clips) {
+      console.log(`📝 Export: Clip has ${clip.notes.length} notes`);
       for (const note of clip.notes) {
-        const startTime = (clip.start + note.time) * (60 / project.meta.bpm) / 4; // Convert beats to seconds
-        const duration = note.duration * (60 / project.meta.bpm) / 4;
+        const beatPosition = clip.start + note.time; // Total beats from project start (keep in beats!)
+
+        // Convert duration to Tone.js format (similar to scheduler)
+        // note.duration is in beats, convert to sixteenths for consistency with scheduler
+        const durationInSixteenths = Math.max(1, Math.round(note.duration * 4));
+        const durationString = `0:0:${durationInSixteenths}`; // BBQ format like "0:0:4"
 
         transportEvents.push({
-          time: startTime,
-          duration,
+          time: beatPosition, // Keep in beats, not seconds!
+          duration: durationString,
           note: note.pitch,
           velocity: note.velocity,
-          instrument
+          trackId: track.id // Add trackId for instrument lookup
         });
+        totalNotes++;
       }
     }
   }
 
-  // Schedule events in Tone.Transport
-  transportEvents.forEach(event => {
-    Tone.Transport.scheduleOnce((time) => {
-      event.instrument.trigger(event.note, event.duration + 'n', time, event.velocity);
-    }, event.time);
-  });
+      console.log(`🎵 Export: Total events scheduled: ${transportEvents.length}, Total notes: ${totalNotes}`);
+
+  // Events will be scheduled inside the offline callback
+  console.log(`🎵 Export: Prepared ${transportEvents.length} events for offline rendering`);
+
+  // Log timing analysis
+  if (transportEvents.length > 0) {
+    const firstEvent = transportEvents[0];
+    const lastEvent = transportEvents[transportEvents.length - 1];
+    console.log(`🎵 Export: Event timing - First: ${firstEvent.time.toFixed(3)} beats, Last: ${lastEvent.time.toFixed(3)} beats`);
+    console.log(`🎵 Export: Expected duration: ${duration.toFixed(3)}s (${(duration * project.meta.bpm / 60).toFixed(3)} beats)`);
+  }
 
   const dispose = () => {
-    // Clean up instruments
-    instruments.forEach(instrument => {
-      if (instrument.dispose) {
-        instrument.dispose();
-      }
-    });
-    instruments.clear();
+    // Instruments will be created and disposed in the offline callback
     Tone.Transport.cancel();
   };
 
-  return { dispose, duration };
+  return { dispose, duration, trackConfigs, transportEvents };
 }
 
 /**
@@ -161,11 +179,27 @@ export async function exportToWav(
 
   onProgress?.(0, 'Initializing offline rendering...');
 
+  // Log project details for debugging
+  console.log('🎵 Export: Starting WAV export');
+  console.log(`🎵 Export: Project "${project.meta.name}" - BPM: ${project.meta.bpm}, Time Sig: ${project.meta.timeSig}, Bars: ${project.meta.bars}`);
+  console.log(`🎵 Export: ${project.tracks.length} tracks total`);
+
+  project.tracks.forEach((track, index) => {
+    const noteCount = track.clips.reduce((sum, clip) => sum + clip.notes.length, 0);
+    console.log(`🎼 Track ${index}: "${track.name}" (${track.instrumentId}) - ${track.clips.length} clips, ${noteCount} notes`);
+  });
+
+  // Initialize audio context if not already done
+  const audioInitialized = await initializeAudioContext();
+  if (!audioInitialized) {
+    throw new Error('Failed to initialize audio context for export');
+  }
+
   // Stop any currently playing audio
   Tone.Transport.stop();
 
-  // Build offline transport
-  const { dispose, duration } = await buildOfflineTransport(project);
+      // Build offline transport
+    const { dispose, duration, trackConfigs, transportEvents } = await buildOfflineTransport(project);
 
   try {
     onProgress?.(10, 'Building transport and scheduling notes...');
@@ -176,10 +210,197 @@ export async function exportToWav(
     onProgress?.(20, `Rendering ${totalDuration.toFixed(1)} seconds of audio...`);
 
     // Render offline
+    console.log(`🎵 Export: Starting offline render for ${totalDuration.toFixed(2)}s at ${sampleRate}Hz`);
+    console.log(`🎵 Export: Available track configs: ${trackConfigs.size}`);
+
     const buffer = await Tone.Offline(async () => {
-      Tone.Transport.start();
-      onProgress?.(30, 'Transport started, rendering audio...');
-    }, totalDuration, sampleRate);
+      console.log('🎵 Export: Offline callback STARTED');
+
+      // Ensure Tone.js is ready in the offline context
+      await Tone.start();
+      console.log(`🎵 Export: Tone context state: ${Tone.context.state}`);
+      console.log(`🎵 Export: Tone.Transport state: ${Tone.Transport.state}`);
+
+      // Create instruments fresh in the offline context
+      const instruments: Map<string, any> = new Map();
+      let createdCount = 0;
+
+      // Create a master output chain for offline rendering
+      const offlineMaster = new Tone.Channel({ volume: 0 });
+      const offlineLimiter = new Tone.Limiter(-0.1);
+      offlineMaster.connect(offlineLimiter);
+      offlineLimiter.toDestination();
+
+      trackConfigs.forEach((config, trackId) => {
+        try {
+          // Create instrument without connecting to main master output
+          const preset = ALL_INSTRUMENTS.find(inst => inst.id === config.instrumentId);
+          if (!preset) {
+            console.warn(`❌ No preset found for instrument ${config.instrumentId}`);
+            return;
+          }
+
+          const instrument = preset.build();
+          if (instrument) {
+            // Verify the instrument has the required properties
+            if (!instrument.synth || !instrument.channel || !instrument.trigger) {
+              console.error(`❌ Instrument ${config.name} missing required properties:`, {
+                hasSynth: !!instrument.synth,
+                hasChannel: !!instrument.channel,
+                hasTrigger: !!instrument.trigger
+              });
+              return;
+            }
+
+            instruments.set(trackId, instrument);
+            createdCount++;
+
+            // Set track parameters
+            instrument.channel.volume.value = config.volume;
+            instrument.channel.pan.value = config.pan;
+            instrument.channel.mute = config.mute;
+
+            // Connect to the offline master output (mimicking normal playback)
+            instrument.channel.connect(offlineMaster);
+            console.log(`🎵 Created and connected instrument for track ${config.name} (${trackId}) to offline master`);
+
+            // Test the instrument connection by triggering a silent note
+            try {
+              // This helps ensure the instrument is properly initialized
+              instrument.trigger('C4', '0:0:1', 0, 0); // Silent test note
+              console.log(`🎵 Test trigger successful for ${config.name}`);
+            } catch (testError) {
+              console.warn(`⚠️ Test trigger failed for ${config.name}:`, testError);
+            }
+          } else {
+            console.error(`❌ Failed to build instrument ${config.name} (${config.instrumentId})`);
+          }
+        } catch (error) {
+          console.warn(`❌ Failed to create/connect instrument for track ${config.name}:`, error);
+        }
+      });
+      console.log(`🎵 Export: Successfully created and connected ${createdCount} instruments`);
+
+      // Schedule events in the offline context
+      console.log(`🎵 Export: Scheduling ${transportEvents.length} events in offline context...`);
+
+      // Log first few events for debugging
+      transportEvents.slice(0, 5).forEach((event, index) => {
+        console.log(`🎼 Event ${index}: note=${event.note}, time=${event.time.toFixed(3)} beats, duration=${event.duration}, velocity=${event.velocity}, track=${event.trackId}`);
+      });
+
+      // Trigger all notes synchronously with correct timing offsets
+      const bpm = project.meta.bpm;
+      const startTime = Tone.now();
+
+      console.log(`🎵 Triggering ${transportEvents.length} notes synchronously starting at ${startTime.toFixed(3)}s`);
+
+      transportEvents.forEach((event, index) => {
+        const timeInSeconds = (event.time * 60) / bpm; // Convert beats to seconds
+        const triggerTime = startTime + timeInSeconds; // Absolute time for this note
+
+        console.log(`🎵 [${index}] Triggering note: ${event.note} at ${triggerTime.toFixed(3)}s (offset: ${timeInSeconds.toFixed(3)}s)`);
+
+        try {
+          // Get the instrument from the offline context instruments map
+          const instrument = instruments.get(event.trackId);
+          if (instrument && typeof instrument.trigger === 'function') {
+            console.log(`🎵 Found instrument for track ${event.trackId}, triggering ${event.note} with duration ${event.duration} at velocity ${event.velocity}...`);
+
+            // Ensure duration is valid
+            let validDuration = event.duration;
+            if (typeof validDuration === 'string' && !validDuration.includes(':')) {
+              // Convert numeric duration to Tone.js format if needed
+              const durationNum = parseFloat(validDuration);
+              if (!isNaN(durationNum)) {
+                validDuration = `0:0:${Math.max(1, Math.round(durationNum * 4))}`;
+              }
+            }
+
+            instrument.trigger(event.note, validDuration, triggerTime, event.velocity);
+            console.log(`✅ [${index}] Successfully triggered: ${event.note} on track ${event.trackId} with duration ${validDuration}`);
+          } else {
+            console.error(`❌ [${index}] No instrument found for track ${event.trackId} or missing trigger method`);
+            console.error(`❌ Available instruments:`, Array.from(instruments.keys()));
+          }
+        } catch (error) {
+          console.error(`❌ [${index}] Failed to trigger ${event.note} on track ${event.trackId}:`, error);
+        }
+      });
+
+      console.log(`🎵 All ${transportEvents.length} notes triggered synchronously`);
+
+      // The offline context will automatically wait for the full duration
+      // Clean up scheduled events and instruments when done - wait longer to ensure all notes finish
+      return new Promise<void>((resolve) => {
+        const cleanupDelay = Math.max(totalDuration * 1000 + 500, 2000); // At least 2 seconds minimum
+        console.log(`🎵 Export: Will wait ${cleanupDelay}ms before cleanup`);
+
+        setTimeout(() => {
+          console.log('🎵 Export: Disposing instruments...');
+
+          // No scheduled events to clear since we triggered synchronously
+
+          instruments.forEach((instrument, trackId) => {
+            if (instrument && typeof instrument.dispose === 'function') {
+              try {
+                instrument.dispose();
+                console.log(`🎵 Disposed instrument for track ${trackId}`);
+              } catch (error) {
+                console.warn(`⚠️ Failed to dispose instrument for track ${trackId}:`, error);
+              }
+            }
+          });
+          console.log('🎵 Export: All instruments disposed');
+          resolve();
+        }, cleanupDelay);
+      });
+
+    }, totalDuration, 2, sampleRate);
+
+    console.log(`🎵 Export: Offline render complete, buffer length: ${buffer.length}, duration: ${buffer.duration.toFixed(2)}s`);
+
+    // Check if buffer has actual audio data
+    let hasAudioData = false;
+    let maxAmplitude = 0;
+    let totalSamples = 0;
+    let samplesAboveThreshold = 0;
+    const threshold = 0.0001; // Lower threshold for better detection
+
+    for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+      const channelData = buffer.getChannelData(channel);
+      for (let i = 0; i < channelData.length; i++) {
+        const sample = Math.abs(channelData[i]);
+        maxAmplitude = Math.max(maxAmplitude, sample);
+        totalSamples++;
+
+        if (sample > threshold) {
+          samplesAboveThreshold++;
+          hasAudioData = true;
+        }
+
+        // Log some sample values for debugging (first 10 samples)
+        if (i < 10) {
+          console.log(`🎵 Export: Sample ${i} channel ${channel}: ${sample.toFixed(8)}`);
+        }
+      }
+    }
+
+    const audioPercentage = totalSamples > 0 ? (samplesAboveThreshold / totalSamples) * 100 : 0;
+
+    console.log(`🎵 Export: Buffer analysis - hasAudioData: ${hasAudioData}, maxAmplitude: ${maxAmplitude.toFixed(8)}`);
+    console.log(`🎵 Export: Audio statistics - ${samplesAboveThreshold}/${totalSamples} samples above ${threshold} (${audioPercentage.toFixed(2)}%)`);
+
+    if (!hasAudioData) {
+      console.warn('⚠️ Warning: No audio data detected in rendered buffer!');
+      console.warn('⚠️ This could indicate:');
+      console.warn('   - Instruments not triggering properly');
+      console.warn('   - Audio routing issues');
+      console.warn('   - Timing problems');
+      console.warn('   - Empty or invalid project data');
+    } else if (maxAmplitude < 0.001) {
+      console.warn('⚠️ Warning: Audio detected but very quiet (max amplitude < 0.001)');
+    }
 
     onProgress?.(80, 'Audio rendered, processing...');
 
@@ -208,9 +429,12 @@ export async function exportToWav(
 
     onProgress?.(90, 'Converting to WAV format...');
 
-    // Convert to WAV blob
-    const wavBlob = audioBufferToWavBlob(buffer);
+    // ToneAudioBuffer should work directly with the WAV conversion
+    // as it implements the same interface as AudioBuffer
+    console.log(`🎵 Export: Converting buffer to WAV, channels: ${buffer.numberOfChannels}, sampleRate: ${buffer.sampleRate}`);
+    const wavBlob = audioBufferToWavBlob(buffer as any);
 
+    console.log(`🎵 Export: WAV blob created, size: ${(wavBlob.size / 1024).toFixed(2)} KB`);
     onProgress?.(100, 'Export complete!');
 
     return wavBlob;
@@ -235,6 +459,114 @@ export function downloadBlob(blob: Blob, filename: string): void {
 }
 
 /**
+ * Export project to MIDI file
+ */
+export async function exportToMidi(
+  project: Project,
+  options: ExportOptions = {},
+  onProgress?: ExportProgressCallback
+): Promise<Blob> {
+  onProgress?.(0, 'Initializing MIDI export...');
+
+  try {
+    // Create a new MIDI file
+    const midi = new Midi();
+
+    // Set tempo
+    midi.header.setTempo(project.meta.bpm);
+
+    // Set time signature (assuming 4/4 for now, could be extended)
+    const [numerator, denominator] = project.meta.timeSig.split('/').map(Number);
+    midi.header.timeSignatures = [{
+      ticks: 0,
+      timeSignature: [numerator || 4, denominator || 4],
+      measures: 0
+    }];
+
+    onProgress?.(20, 'Processing tracks...');
+
+    // Process each track
+    for (let trackIndex = 0; trackIndex < project.tracks.length; trackIndex++) {
+      const track = project.tracks[trackIndex];
+
+      // Skip empty tracks
+      if (track.clips.length === 0 || track.clips.every(clip => clip.notes.length === 0)) {
+        continue;
+      }
+
+      onProgress?.(30 + (trackIndex / project.tracks.length) * 50, `Processing track: ${track.name}`);
+
+      // Create a MIDI track
+      const midiTrack = midi.addTrack();
+      midiTrack.name = track.name;
+
+      // Process all notes in this track's clips
+      for (const clip of track.clips) {
+        if (clip.muted) continue;
+
+        for (const note of clip.notes) {
+          // Convert note name to MIDI number
+          const midiNote = noteNameToMidiNumber(note.pitch);
+
+          // Convert time from beats to ticks (assuming 96 PPQ - Pulses Per Quarter note)
+          const ppq = 96;
+          const startTicks = Math.round((clip.start + note.time) * ppq);
+          const durationTicks = Math.max(1, Math.round(note.duration * ppq));
+
+          // Convert velocity from 0-1 to 0-127
+          const midiVelocity = Math.round(note.velocity * 127);
+
+          // Add note on/off events
+          midiTrack.addNote({
+            midi: midiNote,
+            time: startTicks,
+            duration: durationTicks,
+            velocity: midiVelocity
+          });
+        }
+      }
+    }
+
+    onProgress?.(90, 'Converting to MIDI format...');
+
+    // Convert to blob
+    const midiArrayBuffer = midi.toArray();
+    const midiBlob = new Blob([midiArrayBuffer], { type: 'audio/midi' });
+
+    onProgress?.(100, 'MIDI export complete!');
+    return midiBlob;
+
+  } catch (error) {
+    console.error('MIDI export failed:', error);
+    throw new Error(`MIDI export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Convert note name (e.g., "C4", "F#3") to MIDI number
+ */
+function noteNameToMidiNumber(noteName: string): number {
+  const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const octaveMatch = noteName.match(/([A-G]#?)(\d+)/);
+
+  if (!octaveMatch) {
+    console.warn(`Invalid note name: ${noteName}, using C4`);
+    return 60; // C4 as fallback
+  }
+
+  const note = octaveMatch[1];
+  const octave = parseInt(octaveMatch[2]);
+
+  const noteIndex = noteNames.indexOf(note);
+  if (noteIndex === -1) {
+    console.warn(`Invalid note: ${note}, using C`);
+    return octave * 12 + 60; // C in that octave
+  }
+
+  return (octave + 1) * 12 + noteIndex;
+}
+
+/**
  * Main export function with progress handling
  */
 export async function exportProject(
@@ -255,5 +587,105 @@ export async function exportProject(
   } catch (error) {
     console.error('Export failed:', error);
     throw new Error(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Test export function for development/debugging
+ */
+export async function testExport(): Promise<Blob | void> {
+  console.log('🎵 Testing WAV export with minimal project...');
+
+  // Create a minimal test project
+  const testProject: Project = {
+    meta: {
+      id: 'test-project',
+      name: 'Test Export',
+      bpm: 120,
+      timeSig: '4/4',
+      bars: 1,
+      key: 'C',
+      scale: 'major',
+      swing: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    },
+    tracks: [
+      {
+        id: 'test-track-1',
+        name: 'Test Pulse Lead',
+        instrumentId: 'pulse12',
+        volume: 0,
+        pan: 0,
+        mute: false,
+        solo: false,
+        clips: [
+          {
+            id: 'test-clip-1',
+            start: 0,
+            length: 1,
+            notes: [
+              {
+                id: 'note-1',
+                time: 0,
+                duration: 0.25, // quarter note
+                pitch: 'C4',
+                velocity: 0.8,
+              },
+              {
+                id: 'note-2',
+                time: 0.5,
+                duration: 0.25, // quarter note
+                pitch: 'E4',
+                velocity: 0.8,
+              },
+              {
+                id: 'note-3',
+                time: 1.0,
+                duration: 0.25, // quarter note
+                pitch: 'G4',
+                velocity: 0.8,
+              },
+            ],
+          },
+        ],
+        automation: [],
+      },
+    ],
+  };
+
+  try {
+    const result = await exportToWav(testProject, {}, (progress, status) => {
+      console.log(`📊 Progress: ${progress}% - ${status}`);
+    });
+
+    console.log(`✅ Test export successful! Blob size: ${(result.size / 1024).toFixed(2)} KB`);
+    return result;
+  } catch (error) {
+    console.error('❌ Test export failed:', error);
+  }
+}
+
+/**
+ * Main MIDI export function with progress handling
+ */
+export async function exportProjectToMidi(
+  project: Project,
+  options: ExportOptions = {},
+  onProgress?: ExportProgressCallback
+): Promise<void> {
+  try {
+    const filename = `${project.meta.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mid`;
+
+    onProgress?.(0, 'Starting MIDI export...');
+    const midiBlob = await exportToMidi(project, options, onProgress);
+
+    onProgress?.(95, 'Preparing download...');
+    downloadBlob(midiBlob, filename);
+
+    onProgress?.(100, `Downloaded ${filename}`);
+  } catch (error) {
+    console.error('MIDI export failed:', error);
+    throw new Error(`MIDI export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
