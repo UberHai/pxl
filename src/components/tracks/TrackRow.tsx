@@ -12,23 +12,28 @@ interface TrackRowProps {
   index: number;
 }
 
-// ✅ COMPLETE INSTRUMENT LIBRARY - All 15 instruments working!
+// ✅ COMPLETE INSTRUMENT LIBRARY - All 29 instruments working!
 const PULSE_FAMILY = [
   { id: 'pulse12', name: 'Pulse Lead 12.5%' },
   { id: 'pulse25', name: 'Pulse Lead 25%' },
   { id: 'pulse50', name: 'Pulse Lead 50%' },
   { id: 'pwm', name: 'PWM Lead' },
+  { id: 'detuned-pulse', name: 'Detuned Pulse' },
 ];
 
 const BASS_SECTION = [
   { id: 'tri-bass', name: 'Triangle Bass' },
   { id: 'sub', name: 'Sub Sine Bass' },
+  { id: 'square-bass', name: 'Square Bass' },
+  { id: 'fm-bass', name: 'FM Bass' },
+  { id: 'arp-bass', name: 'Arpeggio Bass' },
 ];
 
 const PERCUSSION_KIT = [
   { id: 'n-kick', name: 'Noise Kick' },
   { id: 'n-snare', name: 'Noise Snare' },
   { id: 'n-hat', name: 'Noise Hat' },
+  { id: 'n-crash', name: 'Noise Crash' },
 ];
 
 const LEAD_MELODIC = [
@@ -36,6 +41,15 @@ const LEAD_MELODIC = [
   { id: 'fm-bell', name: 'FM Bell' },
   { id: 'bc-saw', name: 'Bitcrushed Saw' },
   { id: 'chip-organ', name: 'Chip Organ' },
+  { id: 'wavetable', name: 'Wavetable Lead' },
+  { id: 'ring-mod', name: 'Ring Mod Lead' },
+  { id: 'cheby-lead', name: 'Chebyshev Lead' },
+  { id: 'am-synth', name: 'AM Synth' },
+  { id: 'digital-glitch', name: 'Digital Glitch' },
+  { id: 'res-sweep', name: 'Resonant Sweep' },
+  { id: 'additive-bell', name: 'Additive Bell' },
+  { id: 'vibrato-lead', name: 'Vibrato Lead' },
+  { id: 'duty-sweep', name: 'Duty Cycle Sweep' },
 ];
 
 const SPECIAL = [
