@@ -131,13 +131,20 @@ async function buildOfflineTransport(project: Project): Promise<{
         const durationInSixteenths = Math.max(1, Math.round(note.duration * 4));
         const durationString = `0:0:${durationInSixteenths}`; // BBQ format like "0:0:4"
 
-        transportEvents.push({
+        const eventData = {
           time: beatPosition, // Keep in beats, not seconds!
           duration: durationString,
           note: note.pitch,
           velocity: note.velocity,
           trackId: track.id // Add trackId for instrument lookup
-        });
+        };
+        
+        transportEvents.push(eventData);
+        
+        // Log first few events for diagnosis
+        if (totalNotes < 3) {
+          console.log(`🎵 DIAGNOSTIC: Event ${totalNotes + 1}:`, eventData);
+        }
         totalNotes++;
       }
     }
@@ -213,150 +220,69 @@ export async function exportToWav(
     console.log(`🎵 Export: Starting offline render for ${totalDuration.toFixed(2)}s at ${sampleRate}Hz`);
     console.log(`🎵 Export: Available track configs: ${trackConfigs.size}`);
 
-    const buffer = await Tone.Offline(async () => {
-      console.log('🎵 Export: Offline callback STARTED');
-
-      // Ensure Tone.js is ready in the offline context
-      await Tone.start();
-      console.log(`🎵 Export: Tone context state: ${Tone.context.state}`);
-      console.log(`🎵 Export: Tone.Transport state: ${Tone.Transport.state}`);
-
-      // Create instruments fresh in the offline context
-      const instruments: Map<string, any> = new Map();
-      let createdCount = 0;
-
-      // Create a master output chain for offline rendering
-      const offlineMaster = new Tone.Channel({ volume: 0 });
-      const offlineLimiter = new Tone.Limiter(-0.1);
-      offlineMaster.connect(offlineLimiter);
-      offlineLimiter.toDestination();
-
-      trackConfigs.forEach((config, trackId) => {
-        try {
-          // Create instrument without connecting to main master output
-          const preset = ALL_INSTRUMENTS.find(inst => inst.id === config.instrumentId);
-          if (!preset) {
-            console.warn(`❌ No preset found for instrument ${config.instrumentId}`);
-            return;
-          }
-
-          const instrument = preset.build();
-          if (instrument) {
-            // Verify the instrument has the required properties
-            if (!instrument.synth || !instrument.channel || !instrument.trigger) {
-              console.error(`❌ Instrument ${config.name} missing required properties:`, {
-                hasSynth: !!instrument.synth,
-                hasChannel: !!instrument.channel,
-                hasTrigger: !!instrument.trigger
-              });
-              return;
-            }
-
-            instruments.set(trackId, instrument);
-            createdCount++;
-
-            // Set track parameters
-            instrument.channel.volume.value = config.volume;
-            instrument.channel.pan.value = config.pan;
-            instrument.channel.mute = config.mute;
-
-            // Connect to the offline master output (mimicking normal playback)
-            instrument.channel.connect(offlineMaster);
-            console.log(`🎵 Created and connected instrument for track ${config.name} (${trackId}) to offline master`);
-
-            // Test the instrument connection by triggering a silent note
-            try {
-              // This helps ensure the instrument is properly initialized
-              instrument.trigger('C4', '0:0:1', 0, 0); // Silent test note
-              console.log(`🎵 Test trigger successful for ${config.name}`);
-            } catch (testError) {
-              console.warn(`⚠️ Test trigger failed for ${config.name}:`, testError);
-            }
-          } else {
-            console.error(`❌ Failed to build instrument ${config.name} (${config.instrumentId})`);
-          }
-        } catch (error) {
-          console.warn(`❌ Failed to create/connect instrument for track ${config.name}:`, error);
-        }
-      });
-      console.log(`🎵 Export: Successfully created and connected ${createdCount} instruments`);
-
-      // Schedule events in the offline context
-      console.log(`🎵 Export: Scheduling ${transportEvents.length} events in offline context...`);
-
-      // Log first few events for debugging
-      transportEvents.slice(0, 5).forEach((event, index) => {
-        console.log(`🎼 Event ${index}: note=${event.note}, time=${event.time.toFixed(3)} beats, duration=${event.duration}, velocity=${event.velocity}, track=${event.trackId}`);
-      });
-
-      // Trigger all notes synchronously with correct timing offsets
-      const bpm = project.meta.bpm;
-      const startTime = Tone.now();
-
-      console.log(`🎵 Triggering ${transportEvents.length} notes synchronously starting at ${startTime.toFixed(3)}s`);
-
-      transportEvents.forEach((event, index) => {
-        const timeInSeconds = (event.time * 60) / bpm; // Convert beats to seconds
-        const triggerTime = startTime + timeInSeconds; // Absolute time for this note
-
-        console.log(`🎵 [${index}] Triggering note: ${event.note} at ${triggerTime.toFixed(3)}s (offset: ${timeInSeconds.toFixed(3)}s)`);
-
-        try {
-          // Get the instrument from the offline context instruments map
-          const instrument = instruments.get(event.trackId);
-          if (instrument && typeof instrument.trigger === 'function') {
-            console.log(`🎵 Found instrument for track ${event.trackId}, triggering ${event.note} with duration ${event.duration} at velocity ${event.velocity}...`);
-
-            // Ensure duration is valid
-            let validDuration = event.duration;
-            if (typeof validDuration === 'string' && !validDuration.includes(':')) {
-              // Convert numeric duration to Tone.js format if needed
-              const durationNum = parseFloat(validDuration);
-              if (!isNaN(durationNum)) {
-                validDuration = `0:0:${Math.max(1, Math.round(durationNum * 4))}`;
-              }
-            }
-
-            instrument.trigger(event.note, validDuration, triggerTime, event.velocity);
-            console.log(`✅ [${index}] Successfully triggered: ${event.note} on track ${event.trackId} with duration ${validDuration}`);
-          } else {
-            console.error(`❌ [${index}] No instrument found for track ${event.trackId} or missing trigger method`);
-            console.error(`❌ Available instruments:`, Array.from(instruments.keys()));
-          }
-        } catch (error) {
-          console.error(`❌ [${index}] Failed to trigger ${event.note} on track ${event.trackId}:`, error);
-        }
-      });
-
-      console.log(`🎵 All ${transportEvents.length} notes triggered synchronously`);
-
-      // The offline context will automatically wait for the full duration
-      // Clean up scheduled events and instruments when done - wait longer to ensure all notes finish
-      return new Promise<void>((resolve) => {
-        const cleanupDelay = Math.max(totalDuration * 1000 + 500, 2000); // At least 2 seconds minimum
-        console.log(`🎵 Export: Will wait ${cleanupDelay}ms before cleanup`);
-
-        setTimeout(() => {
-          console.log('🎵 Export: Disposing instruments...');
-
-          // No scheduled events to clear since we triggered synchronously
-
-          instruments.forEach((instrument, trackId) => {
-            if (instrument && typeof instrument.dispose === 'function') {
-              try {
-                instrument.dispose();
-                console.log(`🎵 Disposed instrument for track ${trackId}`);
-              } catch (error) {
-                console.warn(`⚠️ Failed to dispose instrument for track ${trackId}:`, error);
-              }
-            }
-          });
-          console.log('🎵 Export: All instruments disposed');
-          resolve();
-        }, cleanupDelay);
-      });
-
-    }, totalDuration, 2, sampleRate);
+    // REAL-TIME RECORDING APPROACH: Use normal playback + recording instead of broken offline rendering
+    console.log(`🎵 Export: Using real-time recording approach (normal playback + recording)`);
+    
+    // Get the existing audio context and connect a recorder
+    const audioContext = Tone.getContext();
+    const dest = audioContext.createMediaStreamDestination();
+    
+    // Connect Tone.js master output to our recorder destination
+    const masterOutput = getMasterOutput();
+    masterOutput.connect(dest);
+    
+    console.log(`🎵 Export: Connected master output to recorder destination`);
+    
+    // Set up MediaRecorder
+    const mediaRecorder = new MediaRecorder(dest.stream, {
+      mimeType: 'audio/webm;codecs=opus'
+    });
+    
+    const audioChunks: Blob[] = [];
+    mediaRecorder.ondataavailable = (event) => {
+      audioChunks.push(event.data);
+    };
+    
+    // Start recording
+    mediaRecorder.start();
+    console.log(`🎵 Export: Started real-time recording`);
+    
+    // Use existing scheduler system that actually works
+    const { initializeScheduler, startPlayback, stopPlayback, clearScheduler } = await import('./scheduler');
+    
+    // Initialize the scheduler with the project (this sets up instruments and scheduling)
+    console.log(`🎵 Export: Initializing scheduler for real-time playback`);
+    initializeScheduler(project, false); // No looping for export
+    
+    // Start the transport and playback
+    Tone.Transport.start();
+    console.log(`🎵 Export: Started transport and playback for recording`);
+    
+    // Wait for playback to complete
+    await new Promise<void>((resolve) => {
+      setTimeout(() => {
+        mediaRecorder.stop();
+        Tone.Transport.stop();
+        stopPlayback();
+        clearScheduler();
+        console.log(`🎵 Export: Stopped recording and cleaned up after ${totalDuration}s`);
+        resolve();
+      }, totalDuration * 1000 + 500);
+    });
+    
+    // Convert recorded audio to WAV
+    const buffer = await new Promise<AudioBuffer>((resolve) => {
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        
+        // Convert webm to AudioBuffer
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        
+        console.log(`🎵 Export: Converted recorded audio to AudioBuffer, duration: ${audioBuffer.duration.toFixed(2)}s`);
+        resolve(audioBuffer);
+      };
+    });
 
     console.log(`🎵 Export: Offline render complete, buffer length: ${buffer.length}, duration: ${buffer.duration.toFixed(2)}s`);
 
@@ -531,7 +457,7 @@ export async function exportToMidi(
 
     // Convert to blob
     const midiArrayBuffer = midi.toArray();
-    const midiBlob = new Blob([midiArrayBuffer], { type: 'audio/midi' });
+    const midiBlob = new Blob([midiArrayBuffer.buffer as ArrayBuffer], { type: 'audio/midi' });
 
     onProgress?.(100, 'MIDI export complete!');
     return midiBlob;
