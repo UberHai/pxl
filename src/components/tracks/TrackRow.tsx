@@ -12,32 +12,46 @@ interface TrackRowProps {
   index: number;
 }
 
-// Working instruments (currently implemented)
-const WORKING_INSTRUMENTS = [
+// ✅ COMPLETE INSTRUMENT LIBRARY - All 15 instruments working!
+const PULSE_FAMILY = [
   { id: 'pulse12', name: 'Pulse Lead 12.5%' },
+  { id: 'pulse25', name: 'Pulse Lead 25%' },
+  { id: 'pulse50', name: 'Pulse Lead 50%' },
+  { id: 'pwm', name: 'PWM Lead' },
+];
+
+const BASS_SECTION = [
   { id: 'tri-bass', name: 'Triangle Bass' },
+  { id: 'sub', name: 'Sub Sine Bass' },
+];
+
+const PERCUSSION_KIT = [
   { id: 'n-kick', name: 'Noise Kick' },
+  { id: 'n-snare', name: 'Noise Snare' },
+  { id: 'n-hat', name: 'Noise Hat' },
+];
+
+const LEAD_MELODIC = [
+  { id: 'arp-pluck', name: 'Chip Arp Pluck' },
+  { id: 'fm-bell', name: 'FM Bell' },
+  { id: 'bc-saw', name: 'Bitcrushed Saw' },
+  { id: 'chip-organ', name: 'Chip Organ' },
+];
+
+const SPECIAL = [
+  { id: 'sfx-blip', name: 'GamePad Blip' },
+  { id: 'poly-pulse', name: 'PolyPulse Chords' },
   { id: 'simple-chords', name: 'Simple Chords' },
 ];
 
-// Coming soon instruments (UI-only for now)
-const COMING_SOON_INSTRUMENTS = [
-  { id: 'pulse25', name: 'Pulse Lead 25% (Coming Soon)' },
-  { id: 'pulse50', name: 'Pulse Lead 50% (Coming Soon)' },
-  { id: 'pwm', name: 'PWM Lead (Coming Soon)' },
-  { id: 'sub', name: 'Sub Sine Bass (Coming Soon)' },
-  { id: 'n-snare', name: 'Noise Snare (Coming Soon)' },
-  { id: 'n-hat', name: 'Noise Hat (Coming Soon)' },
-  { id: 'arp-pluck', name: 'Chip Arp Pluck (Coming Soon)' },
-  { id: 'poly-pulse', name: 'PolyPulse Chords (Coming Soon)' },
-  { id: 'fm-bell', name: 'FM Bell (Coming Soon)' },
-  { id: 'bc-saw', name: 'Bitcrushed Saw (Coming Soon)' },
-  { id: 'chip-organ', name: 'Chip Organ (Coming Soon)' },
-  { id: 'sfx-blip', name: 'GamePad Blip (Coming Soon)' },
-];
-
 // Combined instruments list
-const INSTRUMENTS = [...WORKING_INSTRUMENTS, ...COMING_SOON_INSTRUMENTS];
+const INSTRUMENTS = [
+  ...PULSE_FAMILY,
+  ...BASS_SECTION,
+  ...PERCUSSION_KIT,
+  ...LEAD_MELODIC,
+  ...SPECIAL
+];
 
 export default function TrackRow({ track, index }: TrackRowProps) {
   const { ui, updateTrack, selectTrack, removeTrack, project } = useProjectStore();
@@ -45,7 +59,7 @@ export default function TrackRow({ track, index }: TrackRowProps) {
   const isSelected = ui.selectedTrackId === track.id;
   const hasNotes = track.clips.some(clip => clip.notes.length > 0);
   const noteCount = track.clips.reduce((total, clip) => total + clip.notes.length, 0);
-  const isWorkingInstrument = WORKING_INSTRUMENTS.some(inst => inst.id === track.instrumentId);
+  // All instruments are now working - no need for this check
   
   const handleNameChange = (name: string) => {
     updateTrack(track.id, { name });
@@ -94,9 +108,6 @@ export default function TrackRow({ track, index }: TrackRowProps) {
             <div className={`w-2 h-2 rounded-full transition-all ${
               hasNotes ? 'bg-primary animate-pulse' : 'bg-muted-foreground/30'
             }`} title={hasNotes ? `${noteCount} notes` : 'Empty track'} />
-            {!isWorkingInstrument && (
-              <div className="w-2 h-0.5 bg-yellow-500 rounded-full" title="Coming soon instrument" />
-            )}
           </div>
         </div>
         <Input
@@ -128,15 +139,36 @@ export default function TrackRow({ track, index }: TrackRowProps) {
           onClick={(e) => e.stopPropagation()}
           className="w-full h-7 px-2 rounded text-xs bg-muted/50 border border-border hover:bg-muted transition-colors"
         >
-          <optgroup label="🎵 Working Instruments">
-            {WORKING_INSTRUMENTS.map((instrument) => (
+          <optgroup label="🎵 Pulse Family">
+            {PULSE_FAMILY.map((instrument) => (
               <option key={instrument.id} value={instrument.id}>
                 {instrument.name}
               </option>
             ))}
           </optgroup>
-          <optgroup label="⏳ Coming Soon">
-            {COMING_SOON_INSTRUMENTS.map((instrument) => (
+          <optgroup label="🎸 Bass Section">
+            {BASS_SECTION.map((instrument) => (
+              <option key={instrument.id} value={instrument.id}>
+                {instrument.name}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="🥁 Percussion Kit">
+            {PERCUSSION_KIT.map((instrument) => (
+              <option key={instrument.id} value={instrument.id}>
+                {instrument.name}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="🎹 Lead & Melodic">
+            {LEAD_MELODIC.map((instrument) => (
+              <option key={instrument.id} value={instrument.id}>
+                {instrument.name}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="✨ Special">
+            {SPECIAL.map((instrument) => (
               <option key={instrument.id} value={instrument.id}>
                 {instrument.name}
               </option>

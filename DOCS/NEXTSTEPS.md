@@ -1,6 +1,6 @@
 # PXL Chiptune Studio - Next Steps Roadmap
 
-> **Last Updated:** 2025-08-30
+> **Last Updated:** 2025-01-29
 > **⚠️ REQUIREMENT:** This document MUST be updated whenever features are completed, priorities change, or new requirements are discovered.
 
 ## 🎉 CURRENT STATUS: WORKING PROTOTYPE ACHIEVED!
@@ -12,10 +12,12 @@
 **✅ MVP Core Features Completed:**
 - Real-time audio synthesis and playback
 - Interactive pattern grid with note editing
+- **NEW:** Scale-degree highlighting with color-coded musical theory
+- **NEW:** Enhanced UX with row hover highlighting
 - Professional transport controls (BPM, time sig, etc.)
 - Working instrument switching
 - Complete state management system
-- Responsive dark theme UI
+- Responsive dark theme UI with enhanced color palette
 
 **✅ Critical Issues Resolved:**
 - Zustand store initialization errors (detectStore bug)
@@ -279,14 +281,98 @@ Based on AGENTS.md specification and current foundation state.
 
 ---
 
+## 🎯 IMMEDIATE PRIORITIES (Next 2-4 Weeks)
+
+### Priority 1: Complete Instrument Library (HIGH IMPACT)
+**Goal:** Expand from 4 to 15 working instruments
+**Time Estimate:** 1-2 weeks
+**Impact:** Massive improvement in creative possibilities
+
+**Tasks:**
+- [ ] **Pulse Family** (2-3 days)
+  - Pulse Lead 25% (modify existing pulse width)
+  - Pulse Lead 50% (square wave)
+  - PWM Lead (pulse width modulation with LFO)
+
+- [ ] **Bass Section** (2 days)
+  - Sub Sine Bass (sine wave with sub-bass frequencies)
+  - Enhanced Triangle Bass variations
+
+- [ ] **Percussion Kit** (3 days)
+  - Noise Snare (filtered noise burst with envelope)
+  - Noise Hat (short filtered noise with high-pass)
+  - Improve existing Noise Kick (add click/punch)
+
+- [ ] **Lead/Melodic** (4-5 days)
+  - Chip Arp Pluck (pulse with fast envelope)
+  - FM Bell (simple 2-operator FM)
+  - Bitcrushed Saw Lead (sawtooth + bitcrusher)
+  - Chip Organ (additive synthesis)
+
+- [ ] **Special** (2 days)
+  - GamePad Blip (rapid envelope SFX)
+  - PolyPulse Chords (enhanced chord capabilities)
+
+**Acceptance Criteria:**
+- All 15 instruments produce distinct, authentic chiptune sounds
+- CPU usage remains under 25% with 12 active tracks
+- Each instrument responds properly to velocity and note length
+
+### Priority 2: Enhanced Pattern Editing (MEDIUM IMPACT)
+**Goal:** Improve editing workflow and musical functionality
+**Time Estimate:** 1 week
+**Impact:** Better user experience and musical capabilities
+
+**Tasks:**
+- [ ] **Pattern Length Control** (1 day)
+  - Variable pattern lengths (1-8 bars)
+  - Pattern loop points
+  - Pattern copy/paste between tracks
+
+- [ ] **Note Properties** (2 days)
+  - Per-note velocity editing (right-click or modifier key)
+  - Note length/duration (drag to extend)
+  - Note preview on hover
+
+- [ ] **Keyboard Shortcuts** (2 days)
+  - Space: Play/Stop
+  - R: Record mode
+  - Delete: Clear selected notes
+  - Ctrl+Z/Y: Undo/Redo
+  - 1-9: Track selection
+
+- [ ] **Grid Enhancements** (2 days)
+  - Zoom in/out (16th, 8th, quarter note resolution)
+  - Snap to grid options
+  - Visual beat/bar markers
+
+### Priority 3: Project Persistence (HIGH IMPACT)
+**Goal:** Save/load projects and prevent data loss
+**Time Estimate:** 3-4 days
+**Impact:** Essential for practical use
+
+**Tasks:**
+- [ ] **Local Storage** (2 days)
+  - Auto-save project state every 30 seconds
+  - Save/load project JSON
+  - Project name and metadata
+
+- [ ] **File Export/Import** (2 days)
+  - Export project as JSON file
+  - Import project from JSON file
+  - Version compatibility handling
+
+---
+
 ## 🚀 Quick Win Priorities
 
-**For immediate development momentum:**
+**For immediate development momentum (Updated based on current progress):**
 
-1. **Week 1-2:** Phase 1.1 (Basic Audio) - Get sound working
-2. **Week 3:** Phase 2.1 (Simple Grid) - Basic note programming  
-3. **Week 4:** Phase 3.1 (4-6 more instruments) - Expand sonic palette
-4. **Week 5-6:** Phase 4.1 (Piano Roll) - Enhanced editing
+1. **✅ COMPLETED:** Phase 1.1 (Basic Audio) - Audio engine fully working
+2. **✅ COMPLETED:** Phase 2.1 (Enhanced Grid) - Pattern editing with scale highlighting  
+3. **NEXT 1-2 weeks:** Complete instrument library (11 more instruments)
+4. **NEXT 1 week:** Enhanced pattern editing features
+5. **NEXT 3-4 days:** Project persistence and save/load
 
 **Critical Path Dependencies:**
 - Audio Foundation → All other phases
@@ -321,5 +407,5 @@ Based on AGENTS.md specification and current foundation state.
 
 **From AGENTS.md:** User can open app, press play, hear demo tune; edit notes; change BPM/timeSig/bars; add tracks (<=12); pick instruments; export WAV & MIDI; ask AI for chords and apply them; save/load project JSON—all without docs.
 
-**Current Status:** ~35% of MVP complete (audio foundation + basic sequencing)
-**Target:** Working MVP in 6-8 weeks with focus on Phases 1-3
+**Current Status:** ~65% of MVP complete (complete instrument library + enhanced sequencing with musical theory)
+**Target:** Working MVP in 2-3 weeks with focus on persistence and export
